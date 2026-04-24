@@ -34,21 +34,39 @@ async function crawlProductReviews(product) {
     console.log(`   ✓ Browser launched`);
 
     context = await browser.newContext({
-      viewport: { width: 1400, height: 900 },
+      viewport: { width: 390, height: 844 },
+      deviceScaleFactor: 3,
+      isMobile: true,
+      hasTouch: true,
       locale: 'ko-KR',
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
       extraHTTPHeaders: { 
         'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Referer': 'https://m.search.naver.com/',
+        'sec-ch-ua-mobile': '?1',
+        'sec-ch-ua-platform': '"iOS"'
       }
     });
+
+    // Add some cookies to look more like a real user
+    await context.addCookies([
+      {
+        name: 'NNB',
+        value: 'ABCDEFGHIJKLMNO',
+        domain: '.naver.com',
+        path: '/'
+      }
+    ]);
 
     const page = await context.newPage();
     
     // 2. Navigate to product page
     console.log(`   → Navigating to product page...`);
     try {
-      await page.goto(product.url, { 
+      const mobileUrl = product.url.replace('smartstore.naver.com', 'm.smartstore.naver.com').replace('shopping.naver.com', 'm.shopping.naver.com');
+      console.log(`   → Using mobile URL: ${mobileUrl}`);
+      await page.goto(mobileUrl, { 
         waitUntil: 'domcontentloaded',
         timeout: 30000 
       });
