@@ -108,7 +108,7 @@ async function crawlProductReviews(product) {
     });
 
     insertMany(reviews);
-    db.prepare('UPDATE products SET last_crawled_at = datetime('now','localtime') WHERE id = ?').run(product.id);
+    db.prepare(`UPDATE products SET last_crawled_at = datetime('now','localtime') WHERE id = ?`).run(product.id);
     db.prepare(`INSERT INTO crawl_logs (product_id, crawl_type, status, reviews_found, new_reviews) VALUES (?, 'reviews', 'success', ?, ?)`).run(product.id, totalFound, newReviewCount);
 
     console.log(`✅ [${product.name}] 리뷰 ${totalFound}개, ${newReviewCount}개 신규`);
