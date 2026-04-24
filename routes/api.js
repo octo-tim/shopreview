@@ -1,0 +1,270 @@
+const express = require('express');
+const router = express.Router();
+const { getDb } = require('../db');
+const { crawlProductReviews, crawlAllProducts, takeProductSnapshot } = require('../crawler/smartstore');
+const { searchNaverShopping } = require('../crawler/search');
+
+// ─── Keyword Search ─────────────────────────────────
+
+// POST search Naver Shopping by keyword
+router.post('/search', async (req, res) => {
+  const { keyword, limit = 40 } = req.body;
+  if (!keyword) return res.status(400).json({ error: '키워드를 입력해주세요' });
+
+  try {
+    const products = await searchNaverShopping(keyword, limit);
+    
+    // Save search history
+    const db = getDb();
+    db.prepare(`
+      INSERT INTO search_history (keyword) VALUES (?)
+      ON CONFLICT(keyword) DO UPDATE SET 
+        last_searched_at = datetime('now','localtime'),
+        search_count = search_count + 1
+    `).run(keyword);
+
+    res.json({ keyword, products });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET recent search history
+router.get('/search-history', (req, res) => {
+  const db = getDb();
+  const history = db.prepare('SELECT * FROM search_history ORDER BY last_searched_at DESC LIMIT 10').all();
+  res.json(history);
+});
+
+// ─── Products (Tracked) ─────────────────────────────
+
+// GET all tracked products
+router.get('/products', (req, res) => {
+  const db = getDb();
+  const products = db.prepare(`
+    SELECT p.*,
+      COUNT(DISTINCT r.id) as review_count,
+      ROUND(AVG(r.rating), 1) as avg_rating,
+      (SELECT search_rank FROM snapshots WHERE product_id = p.id ORDER BY recorded_at DESC LIMIT 1) as current_rank,
+      (SELECT price FROM snapshots WHERE product_id = p.id ORDER BY recorded_at DESC LIMIT 1) as current_price,
+      (SELECT recorded_at FROM snapshots WHERE product_id = p.id ORDER BY recorded_at DESC LIMIT 1) as last_snapshot_at
+    FROM products p
+    LEFT JOIN reviews r ON r.product_id = p.id
+    WHERE p.active = 1
+    GROUP BY p.id
+    ORDER BY p.created_at DESC
+  `).all();
+  res.json(products);
+});
+
+// POST add tracked product (from search result)
+router.post('/products', (req, res) => {
+  const { name, url, tracking_keyword, product_code, mall_name, image_url, category } = req.body;
+  if (!name || !url) return res.status(400).json({ error: '상품명과 URL이 필요합니다' });
+
+  const db = getDb();
+  
+  const count = db.prepare('SELECT COUNT(*) as cnt FROM products WHERE active = 1').get();
+  if (count.cnt >= 10) return res.status(400).json({ error: '최대 10개 상품까지 트래킹 가능합니다' });
+
+  try {
+    const result = db.prepare(`
+      INSERT INTO products (name, url, tracking_keyword, product_code, mall_name, image_url, category)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(name, url.trim(), tracking_keyword || null, product_code || null, mall_name || null, image_url || null, category || null);
+    
+    const product = db.prepare('SELECT * FROM products WHERE id = ?').get(result.lastInsertRowid);
+    res.json(product);
+  } catch (e) {
+    if (e.message.includes('UNIQUE')) {
+      // Reactivate if soft-deleted
+      const existing = db.prepare('SELECT * FROM products WHERE url = ?').get(url.trim());
+      if (existing && !existing.active) {
+        db.prepare('UPDATE products SET active = 1, tracking_keyword = ? WHERE id = ?').run(tracking_keyword || null, existing.id);
+        return res.json(db.prepare('SELECT * FROM products WHERE id = ?').get(existing.id));
+      }
+      res.status(400).json({ error: '이미 트래킹 중인 상품입니다' });
+    } else {
+      res.status(500).json({ error: e.message });
+    }
+  }
+});
+
+// PATCH update tracking keyword
+router.patch('/products/:id', (req, res) => {
+  const { tracking_keyword, name, category } = req.body;
+  const db = getDb();
+  
+  const fields = [];
+  const values = [];
+  if (tracking_keyword !== undefined) { fields.push('tracking_keyword = ?'); values.push(tracking_keyword); }
+  if (name !== undefined) { fields.push('name = ?'); values.push(name); }
+  if (category !== undefined) { fields.push('category = ?'); values.push(category); }
+  
+  if (fields.length === 0) return res.status(400).json({ error: '업데이트할 필드 없음' });
+  
+  values.push(req.params.id);
+  db.prepare(`UPDATE products SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  res.json({ success: true });
+});
+
+// DELETE product
+router.delete('/products/:id', (req, res) => {
+  const db = getDb();
+  db.prepare('UPDATE products SET active = 0 WHERE id = ?').run(req.params.id);
+  res.json({ success: true });
+});
+
+// POST crawl single product (reviews)
+router.post('/products/:id/crawl', async (req, res) => {
+  const db = getDb();
+  const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+  if (!product) return res.status(404).json({ error: '상품 없음' });
+
+  try {
+    const snap = await takeProductSnapshot(product);
+    const rev = await crawlProductReviews(product);
+    res.json({ snapshot: snap, reviews: rev });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST take snapshot only
+router.post('/products/:id/snapshot', async (req, res) => {
+  const db = getDb();
+  const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+  if (!product) return res.status(404).json({ error: '상품 없음' });
+
+  try {
+    const result = await takeProductSnapshot(product);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/crawl-all', async (req, res) => {
+  try {
+    const results = await crawlAllProducts();
+    res.json(results);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── Snapshots / Trends ─────────────────────────────
+
+// GET snapshots (trend data) for a product
+router.get('/products/:id/snapshots', (req, res) => {
+  const db = getDb();
+  const { limit = 200 } = req.query;
+  const snapshots = db.prepare(`
+    SELECT * FROM snapshots WHERE product_id = ?
+    ORDER BY recorded_at ASC LIMIT ?
+  `).all(req.params.id, limit);
+  res.json(snapshots);
+});
+
+// GET trend summary (latest vs oldest comparison)
+router.get('/products/:id/trends', (req, res) => {
+  const db = getDb();
+  const id = req.params.id;
+  
+  const latest = db.prepare('SELECT * FROM snapshots WHERE product_id = ? ORDER BY recorded_at DESC LIMIT 1').get(id);
+  const oldest = db.prepare('SELECT * FROM snapshots WHERE product_id = ? ORDER BY recorded_at ASC LIMIT 1').get(id);
+  const dayAgo = db.prepare(`
+    SELECT * FROM snapshots WHERE product_id = ? 
+    AND recorded_at < datetime('now', '-1 day', 'localtime')
+    ORDER BY recorded_at DESC LIMIT 1
+  `).get(id);
+
+  res.json({ latest, oldest, dayAgo });
+});
+
+// ─── Reviews ────────────────────────────────────────
+
+router.get('/products/:id/reviews', (req, res) => {
+  const db = getDb();
+  const { page = 1, limit = 20, rating, sort = 'recent' } = req.query;
+  const offset = (page - 1) * limit;
+
+  let where = 'WHERE r.product_id = ?';
+  const params = [req.params.id];
+
+  if (rating) { where += ' AND r.rating = ?'; params.push(rating); }
+
+  const orderBy = sort === 'helpful' ? 'r.helpful_count DESC' : 'r.review_date DESC, r.crawled_at DESC';
+  const reviews = db.prepare(`SELECT r.* FROM reviews r ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(...params, limit, offset);
+  const total = db.prepare(`SELECT COUNT(*) as cnt FROM reviews r ${where}`).get(...params);
+  res.json({ reviews, total: total.cnt, page: parseInt(page), limit: parseInt(limit) });
+});
+
+router.get('/products/:id/stats', (req, res) => {
+  const db = getDb();
+  const id = req.params.id;
+
+  const overall = db.prepare(`
+    SELECT COUNT(*) as total, ROUND(AVG(rating),1) as avg_rating,
+      SUM(CASE WHEN has_photo = 1 THEN 1 ELSE 0 END) as photo_count
+    FROM reviews WHERE product_id = ?
+  `).get(id);
+
+  const distribution = db.prepare(`SELECT rating, COUNT(*) as count FROM reviews WHERE product_id = ? GROUP BY rating ORDER BY rating DESC`).all(id);
+
+  const reviews = db.prepare('SELECT content FROM reviews WHERE product_id = ? AND content IS NOT NULL').all(id);
+  const keywords = extractKeywords(reviews.map(r => r.content));
+
+  res.json({ overall, distribution, keywords });
+});
+
+router.get('/reviews', (req, res) => {
+  const db = getDb();
+  const { limit = 50 } = req.query;
+  const reviews = db.prepare(`
+    SELECT r.*, p.name as product_name FROM reviews r
+    JOIN products p ON p.id = r.product_id
+    WHERE p.active = 1
+    ORDER BY r.crawled_at DESC LIMIT ?
+  `).all(limit);
+  res.json(reviews);
+});
+
+// ─── AI Analysis ────────────────────────────────────
+
+router.get('/products/:id/analyses', (req, res) => {
+  const db = getDb();
+  const analyses = db.prepare(`SELECT * FROM ai_analyses WHERE product_id = ? ORDER BY created_at DESC LIMIT 10`).all(req.params.id);
+  res.json(analyses);
+});
+
+router.post('/products/:id/analyses', (req, res) => {
+  const { analysis_type, content } = req.body;
+  const db = getDb();
+  const result = db.prepare(`INSERT INTO ai_analyses (product_id, analysis_type, content) VALUES (?, ?, ?)`).run(req.params.id, analysis_type, content);
+  res.json({ id: result.lastInsertRowid });
+});
+
+// ─── Helpers ────────────────────────────────────────
+
+function extractKeywords(texts) {
+  const stopWords = new Set([
+    '이','가','을','를','은','는','의','에','도','로','와','과','한',
+    '하다','있다','없다','그','이런','저런','너무','정말','진짜','매우',
+    '좀','더','또','잘','못','안','다','것','수','때','제품','상품',
+    '구매','배송','포장','사용','사서','왔어요','좋아요','같아요','해요'
+  ]);
+
+  const freq = {};
+  texts.forEach(text => {
+    if (!text) return;
+    const words = text.replace(/[^\w\s가-힣]/g, ' ').split(/\s+/);
+    words.forEach(w => {
+      if (w.length >= 2 && !stopWords.has(w)) freq[w] = (freq[w] || 0) + 1;
+    });
+  });
+
+  return Object.entries(freq).sort((a,b) => b[1]-a[1]).slice(0, 30).map(([word, count]) => ({ word, count }));
+}
+
+module.exports = router;

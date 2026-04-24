@@ -1,0 +1,1378 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>리뷰 레이더 — 키워드 기반 경쟁 모니터링</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0c10;
+    --bg2: #111318;
+    --bg3: #1a1d24;
+    --border: #22262f;
+    --border2: #2d323e;
+    --accent: #4f8ef7;
+    --accent2: #7c5cfc;
+    --green: #22c87a;
+    --red: #f75555;
+    --yellow: #f7c948;
+    --orange: #f79948;
+    --text: #e8eaf0;
+    --text2: #8891a8;
+    --text3: #555d72;
+    --card-radius: 12px;
+    --mono: 'DM Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; }
+
+  /* Sidebar */
+  .sidebar { width: 240px; min-height: 100vh; background: var(--bg2); border-right: 1px solid var(--border); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 100; }
+  .logo { padding: 24px 20px 20px; border-bottom: 1px solid var(--border); }
+  .logo-title { font-size: 18px; font-weight: 900; letter-spacing: -0.5px; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .logo-sub { font-size: 11px; color: var(--text3); margin-top: 2px; font-family: var(--mono); }
+
+  .nav { flex: 1; padding: 16px 10px; overflow-y: auto; }
+  .nav-section { font-size: 10px; color: var(--text3); font-family: var(--mono); letter-spacing: 1px; padding: 8px 10px 4px; text-transform: uppercase; }
+
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; cursor: pointer; color: var(--text2); font-size: 13px; font-weight: 500; transition: all 0.15s; margin-bottom: 2px; border: 1px solid transparent; }
+  .nav-item:hover { background: var(--bg3); color: var(--text); }
+  .nav-item.active { background: rgba(79,142,247,0.1); color: var(--accent); border-color: rgba(79,142,247,0.2); }
+  .nav-item .icon { font-size: 16px; width: 20px; text-align: center; }
+
+  .products-nav { padding: 10px; border-top: 1px solid var(--border); max-height: 40vh; overflow-y: auto; }
+  .products-nav-title { font-size: 10px; color: var(--text3); font-family: var(--mono); padding: 4px 0 8px; letter-spacing: 1px; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; }
+
+  .product-nav-item { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 7px; cursor: pointer; font-size: 12px; color: var(--text2); transition: all 0.15s; margin-bottom: 2px; border: 1px solid transparent; }
+  .product-nav-item:hover { background: var(--bg3); color: var(--text); }
+  .product-nav-item.active { background: rgba(79,142,247,0.08); color: var(--accent); border-color: rgba(79,142,247,0.15); }
+  .product-nav-item .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text3); flex-shrink: 0; }
+  .product-nav-item.active .dot { background: var(--accent); }
+  .product-nav-item .pname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .crawl-status { padding: 12px; border-top: 1px solid var(--border); font-size: 11px; font-family: var(--mono); color: var(--text3); }
+  .crawl-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--green); margin-right: 5px; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* Main */
+  .main { margin-left: 240px; flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+  .topbar { height: 60px; background: var(--bg2); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 28px; position: sticky; top: 0; z-index: 50; }
+  .topbar-title { font-size: 16px; font-weight: 700; }
+  .topbar-actions { display: flex; gap: 10px; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 7px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; border: none; font-family: inherit; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #3d7ae5; }
+  .btn-secondary { background: var(--bg3); color: var(--text2); border: 1px solid var(--border2); }
+  .btn-secondary:hover { color: var(--text); border-color: var(--border2); }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn-danger { background: rgba(247,85,85,0.15); color: var(--red); border: 1px solid rgba(247,85,85,0.2); }
+  .btn-danger:hover { background: rgba(247,85,85,0.25); }
+  .btn-ai { background: linear-gradient(135deg, rgba(79,142,247,0.2), rgba(124,92,252,0.2)); color: var(--accent2); border: 1px solid rgba(124,92,252,0.3); }
+  .btn-ai:hover { background: linear-gradient(135deg, rgba(79,142,247,0.3), rgba(124,92,252,0.3)); }
+  .btn-track { background: linear-gradient(135deg, var(--green), #18a863); color: #fff; font-weight: 600; }
+  .btn-track:hover { opacity: 0.9; }
+  .btn-track.tracked { background: var(--bg3); color: var(--green); border: 1px solid var(--green); }
+
+  .content { padding: 28px; flex: 1; }
+
+  /* Cards */
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--card-radius); overflow: hidden; }
+  .card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .card-title { font-size: 14px; font-weight: 600; }
+  .card-body { padding: 20px; }
+
+  /* Search bar */
+  .search-hero { background: linear-gradient(135deg, var(--bg2), var(--bg3)); border: 1px solid var(--border2); border-radius: 14px; padding: 28px; margin-bottom: 24px; position: relative; overflow: hidden; }
+  .search-hero::before { content:''; position:absolute; top:-50%; right:-20%; width:400px; height:400px; background: radial-gradient(circle, rgba(79,142,247,0.1), transparent 70%); pointer-events: none; }
+  .search-hero-title { font-size: 20px; font-weight: 900; margin-bottom: 4px; letter-spacing: -0.5px; }
+  .search-hero-sub { font-size: 13px; color: var(--text2); margin-bottom: 18px; }
+  .search-box { display: flex; gap: 10px; position: relative; z-index: 1; }
+  .search-input { flex: 1; background: var(--bg); border: 1.5px solid var(--border2); border-radius: 10px; padding: 14px 18px; font-size: 15px; color: var(--text); font-family: inherit; outline: none; transition: border-color 0.15s; }
+  .search-input:focus { border-color: var(--accent); }
+  .search-input::placeholder { color: var(--text3); }
+  .btn-search { background: var(--accent); color: #fff; padding: 0 24px; border-radius: 10px; font-size: 14px; font-weight: 600; border: none; cursor: pointer; transition: all 0.15s; }
+  .btn-search:hover { background: #3d7ae5; }
+
+  .recent-searches { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; align-items: center; }
+  .recent-searches-label { font-size: 11px; color: var(--text3); font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.5px; margin-right: 4px; }
+  .recent-search-chip { padding: 4px 10px; border-radius: 14px; background: var(--bg); border: 1px solid var(--border2); font-size: 12px; color: var(--text2); cursor: pointer; transition: all 0.15s; }
+  .recent-search-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Search results */
+  .search-results-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .results-count { font-size: 13px; color: var(--text2); }
+  .results-count strong { color: var(--accent); font-weight: 600; font-family: var(--mono); }
+
+  .search-result-item { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 8px; display: grid; grid-template-columns: 50px 80px 1fr auto; gap: 16px; align-items: center; transition: all 0.15s; }
+  .search-result-item:hover { border-color: var(--border2); background: var(--bg3); }
+  .search-result-item.tracked { border-color: rgba(34,200,122,0.3); background: rgba(34,200,122,0.03); }
+
+  .result-rank { text-align: center; }
+  .result-rank-num { font-size: 22px; font-weight: 900; font-family: var(--mono); line-height: 1; }
+  .result-rank-top3 { color: var(--yellow); }
+  .result-rank-top10 { color: var(--accent); }
+  .result-rank-top20 { color: var(--text); }
+  .result-rank-other { color: var(--text3); }
+  .result-rank-ad { font-size: 10px; font-family: var(--mono); background: rgba(247,153,72,0.15); color: var(--orange); padding: 2px 8px; border-radius: 10px; border: 1px solid rgba(247,153,72,0.2); }
+
+  .result-thumb { width: 80px; height: 80px; background: var(--bg3); border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+  .result-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .result-thumb-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text3); font-size: 24px; }
+
+  .result-info { min-width: 0; }
+  .result-title { font-size: 14px; font-weight: 500; line-height: 1.4; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .result-meta { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--text3); font-family: var(--mono); flex-wrap: wrap; }
+  .result-mall { color: var(--accent); }
+  .result-price { font-size: 16px; font-weight: 700; color: var(--text); font-family: var(--mono); margin-top: 4px; }
+  .result-orig-price { text-decoration: line-through; color: var(--text3); font-size: 11px; margin-right: 4px; }
+
+  .result-actions { display: flex; gap: 6px; flex-direction: column; align-items: stretch; min-width: 110px; }
+
+  /* Stats */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--card-radius); padding: 20px; }
+  .stat-label { font-size: 11px; color: var(--text3); font-family: var(--mono); letter-spacing: 0.5px; text-transform: uppercase; }
+  .stat-value { font-size: 32px; font-weight: 900; margin-top: 6px; line-height: 1; }
+  .stat-sub { font-size: 12px; color: var(--text2); margin-top: 6px; }
+  .stat-accent { color: var(--accent); }
+  .stat-green { color: var(--green); }
+  .stat-yellow { color: var(--yellow); }
+  .stat-red { color: var(--red); }
+
+  /* Rating Bars */
+  .rating-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .rating-bar-label { font-size: 12px; font-family: var(--mono); width: 20px; text-align: right; color: var(--text2); }
+  .rating-bar-track { flex: 1; height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+  .rating-bar-fill { height: 100%; border-radius: 3px; transition: width 0.6s cubic-bezier(.4,0,.2,1); }
+  .rating-bar-count { font-size: 11px; font-family: var(--mono); color: var(--text3); width: 30px; }
+
+  /* Reviews */
+  .review-item { padding: 16px 0; border-bottom: 1px solid var(--border); }
+  .review-item:last-child { border-bottom: none; }
+  .review-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+  .review-stars { display: flex; gap: 2px; }
+  .star { font-size: 13px; }
+  .star.filled { color: var(--yellow); }
+  .star.empty { color: var(--border2); }
+  .review-meta { font-size: 11px; color: var(--text3); font-family: var(--mono); margin-top: 2px; }
+  .review-content { font-size: 13px; color: var(--text2); line-height: 1.6; }
+  .review-option { display: inline-block; font-size: 11px; background: var(--bg3); color: var(--text3); padding: 2px 8px; border-radius: 4px; margin-top: 6px; font-family: var(--mono); }
+  .review-badges { display: flex; gap: 6px; }
+  .badge { font-size: 10px; padding: 2px 7px; border-radius: 4px; font-family: var(--mono); }
+  .badge-photo { background: rgba(79,142,247,0.1); color: var(--accent); border: 1px solid rgba(79,142,247,0.2); }
+  .badge-helpful { background: rgba(34,200,122,0.1); color: var(--green); border: 1px solid rgba(34,200,122,0.2); }
+
+  /* Keywords */
+  .keywords-cloud { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 0; }
+  .keyword-tag { padding: 4px 10px; border-radius: 6px; font-size: 12px; background: var(--bg3); border: 1px solid var(--border2); color: var(--text2); cursor: default; transition: all 0.15s; }
+  .keyword-tag:hover { border-color: var(--accent); color: var(--accent); }
+  .keyword-tag .kcount { font-family: var(--mono); font-size: 10px; color: var(--text3); margin-left: 4px; }
+
+  /* AI Panel */
+  .ai-panel { background: linear-gradient(135deg, rgba(79,142,247,0.05), rgba(124,92,252,0.05)); border: 1px solid rgba(124,92,252,0.2); border-radius: var(--card-radius); }
+  .ai-header { display: flex; align-items: center; gap: 10px; }
+  .ai-icon { font-size: 20px; }
+  .ai-badge { font-size: 10px; font-family: var(--mono); background: rgba(124,92,252,0.2); color: var(--accent2); padding: 2px 7px; border-radius: 4px; }
+  .ai-output { background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px; padding: 16px; font-size: 13px; line-height: 1.75; color: var(--text2); max-height: 400px; overflow-y: auto; white-space: pre-wrap; }
+  .ai-output:empty::before { content: 'AI 분석 버튼을 클릭하면 결과가 여기에 표시됩니다.'; color: var(--text3); font-style: italic; }
+  .ai-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ai-tab { padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s; border: 1px solid var(--border2); background: var(--bg3); color: var(--text2); font-family: inherit; }
+  .ai-tab:hover { border-color: var(--accent2); color: var(--accent2); }
+  .ai-tab.active { background: rgba(124,92,252,0.15); color: var(--accent2); border-color: rgba(124,92,252,0.4); }
+
+  /* Modal */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 200; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--bg2); border: 1px solid var(--border2); border-radius: 14px; padding: 28px; width: 520px; max-width: 90vw; }
+  .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+  .modal-sub { font-size: 13px; color: var(--text2); margin-bottom: 20px; }
+  .form-group { margin-bottom: 16px; }
+  .form-label { font-size: 12px; color: var(--text2); margin-bottom: 6px; display: block; font-weight: 500; }
+  .form-input { width: 100%; background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 13px; font-family: inherit; transition: border-color 0.15s; outline: none; }
+  .form-input:focus { border-color: var(--accent); }
+  .form-input::placeholder { color: var(--text3); }
+  .form-hint { font-size: 11px; color: var(--text3); margin-top: 4px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+  .preview-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; gap: 12px; margin-bottom: 16px; }
+  .preview-thumb { width: 60px; height: 60px; border-radius: 6px; background: var(--bg); overflow: hidden; flex-shrink: 0; }
+  .preview-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .preview-info { flex: 1; min-width: 0; }
+  .preview-title { font-size: 13px; font-weight: 500; line-height: 1.4; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .preview-meta { font-size: 11px; color: var(--text3); font-family: var(--mono); }
+
+  /* Grid */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+
+  /* Loading */
+  .loading { display: flex; align-items: center; gap: 8px; color: var(--text3); font-size: 13px; padding: 40px 20px; justify-content: center; }
+  .spinner { width: 16px; height: 16px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Empty */
+  .empty { text-align: center; padding: 60px 20px; color: var(--text3); }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-title { font-size: 15px; font-weight: 600; color: var(--text2); margin-bottom: 6px; }
+  .empty-desc { font-size: 13px; }
+
+  /* Scroll */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* Toast */
+  .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 300; display: flex; flex-direction: column; gap: 8px; }
+  .toast { background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px; padding: 12px 16px; font-size: 13px; display: flex; align-items: center; gap: 10px; min-width: 260px; animation: slideIn 0.2s ease; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+  @keyframes slideIn { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: translateY(0); } }
+  .toast.success { border-color: rgba(34,200,122,0.3); }
+  .toast.error { border-color: rgba(247,85,85,0.3); }
+  .toast-icon { font-size: 16px; }
+
+  /* Product cards */
+  .product-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--card-radius); padding: 18px 20px; display: flex; align-items: center; gap: 16px; cursor: pointer; transition: all 0.15s; margin-bottom: 10px; }
+  .product-card:hover { border-color: var(--border2); background: var(--bg3); }
+  .product-card.active { border-color: rgba(79,142,247,0.4); background: rgba(79,142,247,0.05); }
+  .product-card-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text3); flex-shrink: 0; }
+  .product-card.active .product-card-dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .product-card-thumb { width: 60px; height: 60px; border-radius: 8px; background: var(--bg3); overflow: hidden; flex-shrink: 0; }
+  .product-card-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .product-card-info { flex: 1; min-width: 0; }
+  .product-card-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .product-card-meta { font-size: 11px; color: var(--text3); font-family: var(--mono); margin-top: 3px; }
+  .product-card-keyword { display: inline-block; font-size: 11px; background: rgba(79,142,247,0.1); color: var(--accent); padding: 2px 8px; border-radius: 4px; margin-right: 6px; }
+  .product-card-rank { font-size: 18px; font-weight: 900; font-family: var(--mono); color: var(--yellow); min-width: 40px; text-align: center; }
+  .product-card-actions { display: flex; gap: 6px; }
+
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 12px; }
+  .section-title { font-size: 15px; font-weight: 700; }
+
+  .filter-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { padding: 4px 10px; border-radius: 20px; font-size: 12px; cursor: pointer; transition: all 0.15s; border: 1px solid var(--border2); background: var(--bg3); color: var(--text2); }
+  .chip:hover, .chip.active { background: rgba(79,142,247,0.15); color: var(--accent); border-color: rgba(79,142,247,0.3); }
+
+  /* Trend cards */
+  .trend-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--card-radius); padding: 20px; }
+  .trend-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
+  .trend-current-value { font-size: 28px; font-weight: 900; font-family: var(--mono); line-height: 1; }
+  .trend-change { font-size: 12px; font-family: var(--mono); font-weight: 600; padding: 3px 8px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px; margin-top: 8px; }
+  .trend-change.up { background: rgba(34,200,122,0.1); color: var(--green); }
+  .trend-change.down { background: rgba(247,85,85,0.1); color: var(--red); }
+  .trend-change.neutral { background: var(--bg3); color: var(--text3); }
+  .trend-chart-container { position: relative; height: 80px; margin-top: 12px; }
+
+  .btn.loading-state { opacity: 0.6; pointer-events: none; }
+
+  @media (max-width: 1100px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    .search-result-item { grid-template-columns: 40px 60px 1fr; }
+    .result-actions { grid-column: 1/-1; flex-direction: row; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-title">🔍 리뷰 레이더</div>
+    <div class="logo-sub">SMARTSTORE MONITOR v2</div>
+  </div>
+
+  <nav class="nav">
+    <div class="nav-section">메뉴</div>
+    <div class="nav-item active" data-page="search" onclick="showPage('search', this)">
+      <span class="icon">🔎</span> 키워드 검색
+    </div>
+    <div class="nav-item" data-page="dashboard" onclick="showPage('dashboard', this)">
+      <span class="icon">📊</span> 대시보드
+    </div>
+    <div class="nav-item" data-page="trends" onclick="showPage('trends', this)">
+      <span class="icon">📈</span> 추이 분석
+    </div>
+    <div class="nav-item" data-page="products" onclick="showPage('products', this)">
+      <span class="icon">📦</span> 트래킹 상품
+    </div>
+    <div class="nav-item" data-page="all-reviews" onclick="showPage('all-reviews', this)">
+      <span class="icon">💬</span> 전체 리뷰
+    </div>
+  </nav>
+
+  <div class="products-nav">
+    <div class="products-nav-title">
+      <span>트래킹 상품</span>
+      <span id="tracked-count" style="color:var(--accent);">0/10</span>
+    </div>
+    <div id="sidebar-product-list">
+      <div style="font-size:12px;color:var(--text3);padding:4px 8px;">등록된 상품 없음</div>
+    </div>
+  </div>
+
+  <div class="crawl-status">
+    <span class="crawl-dot"></span>
+    <span id="crawl-status-text">30분마다 자동 수집</span>
+  </div>
+</aside>
+
+<!-- Main -->
+<main class="main">
+  <div class="topbar">
+    <div class="topbar-title" id="topbar-title">키워드 검색</div>
+    <div class="topbar-actions">
+      <button class="btn btn-secondary btn-sm" onclick="crawlAll(this)">⟳ 전체 수집</button>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- Search Page -->
+    <div class="page active" id="page-search">
+      <div class="search-hero">
+        <div class="search-hero-title">🎯 경쟁 상품 검색</div>
+        <div class="search-hero-sub">네이버 스마트스토어에서 키워드로 상품을 검색하고 노출 순위를 확인하세요</div>
+        <div class="search-box">
+          <input type="text" class="search-input" id="search-input" placeholder="예: 유아매트, 기저귀, 내복..." onkeydown="if(event.key==='Enter')doSearch()">
+          <button class="btn-search" onclick="doSearch()">검색</button>
+        </div>
+        <div class="recent-searches" id="recent-searches">
+          <span class="recent-searches-label">최근 검색:</span>
+        </div>
+      </div>
+
+      <div id="search-results-container">
+        <div class="empty">
+          <div class="empty-icon">🔎</div>
+          <div class="empty-title">키워드를 입력해 검색하세요</div>
+          <div class="empty-desc">네이버 스마트스토어 상위 40개 상품이 노출 순위대로 표시됩니다</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dashboard Page -->
+    <div class="page" id="page-dashboard">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">트래킹 상품</div>
+          <div class="stat-value stat-accent" id="stat-products">0</div>
+          <div class="stat-sub">모니터링 중</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">총 리뷰 수</div>
+          <div class="stat-value" id="stat-reviews">0</div>
+          <div class="stat-sub">수집된 전체</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">평균 평점</div>
+          <div class="stat-value stat-yellow" id="stat-rating">—</div>
+          <div class="stat-sub">전체 평균</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">스냅샷</div>
+          <div class="stat-value stat-green" id="stat-snapshots">0</div>
+          <div class="stat-sub">수집된 추이 데이터</div>
+        </div>
+      </div>
+
+      <div class="grid-3">
+        <div>
+          <div class="section-header">
+            <div class="section-title">최근 리뷰</div>
+          </div>
+          <div class="card">
+            <div class="card-body" id="recent-reviews-list" style="padding:0 20px;">
+              <div class="loading"><div class="spinner"></div> 로딩 중...</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="section-header">
+            <div class="section-title">상품 현황</div>
+          </div>
+          <div id="product-overview-list"><div class="loading"><div class="spinner"></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trends Page -->
+    <div class="page" id="page-trends">
+      <div class="section-header">
+        <div class="section-title">📈 추이 분석</div>
+        <select class="form-input" id="trend-product-selector" style="max-width: 300px;" onchange="loadTrendDetail(this.value)">
+          <option value="">상품을 선택하세요</option>
+        </select>
+      </div>
+      <div id="trend-content">
+        <div class="empty">
+          <div class="empty-icon">📊</div>
+          <div class="empty-title">트래킹 상품을 선택하세요</div>
+          <div class="empty-desc">순위, 가격, 리뷰 수, 별점 추이를 시계열 그래프로 확인할 수 있습니다</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Products Page -->
+    <div class="page" id="page-products">
+      <div class="section-header">
+        <div class="section-title">트래킹 상품 <span style="font-size:12px;color:var(--text3);font-family:var(--mono);" id="product-count-label"></span></div>
+        <button class="btn btn-primary btn-sm" onclick="showPage('search', document.querySelector('[data-page=search]'))">+ 상품 찾기</button>
+      </div>
+      <div id="products-list"><div class="loading"><div class="spinner"></div> 로딩 중...</div></div>
+    </div>
+
+    <!-- All Reviews Page -->
+    <div class="page" id="page-all-reviews">
+      <div class="section-header">
+        <div class="section-title">전체 리뷰</div>
+        <div class="filter-chips" id="review-filter-chips">
+          <div class="chip active" data-product="all" onclick="filterReviews('all', this)">전체</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body" style="padding: 0 20px;" id="all-reviews-list">
+          <div class="loading"><div class="spinner"></div> 로딩 중...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Product Detail Page -->
+    <div class="page" id="page-product-detail">
+      <div id="product-detail-content"></div>
+    </div>
+
+  </div>
+</main>
+
+<!-- Track Modal -->
+<div class="modal-overlay" id="track-modal">
+  <div class="modal">
+    <div class="modal-title">📦 상품 트래킹 시작</div>
+    <div class="modal-sub">이 상품의 순위/가격/리뷰 추이를 30분마다 자동으로 기록합니다</div>
+    
+    <div class="preview-card" id="track-preview"></div>
+
+    <div class="form-group">
+      <label class="form-label">추적 키워드 *</label>
+      <input class="form-input" id="track-keyword" placeholder="예: 유아매트">
+      <div class="form-hint">이 키워드로 검색 시 노출 순위를 추적합니다</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">카테고리 (선택)</label>
+      <input class="form-input" id="track-category" placeholder="예: 유아용품">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeTrackModal()">취소</button>
+      <button class="btn btn-primary" onclick="confirmTrack()">트래킹 시작</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+const API = '/api';
+let products = [];
+let currentProductId = null;
+let allReviewsCache = [];
+let searchResults = [];
+let pendingTrackItem = null;
+let currentKeyword = '';
+let trendChart = null;
+let miniCharts = {};
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadProducts();
+  loadRecentSearches();
+});
+
+// ── Page Navigation ─────────────────────────────────
+function showPage(pageId, navEl) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.product-nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + pageId)?.classList.add('active');
+  navEl?.classList.add('active');
+
+  const titles = { search: '키워드 검색', dashboard: '대시보드', trends: '추이 분석', products: '트래킹 상품', 'all-reviews': '전체 리뷰' };
+  document.getElementById('topbar-title').textContent = titles[pageId] || navEl?.querySelector('.pname')?.textContent || '리뷰 레이더';
+
+  if (pageId === 'dashboard') loadDashboard();
+  else if (pageId === 'trends') loadTrendsPage();
+  else if (pageId === 'products') loadProductsPage();
+  else if (pageId === 'all-reviews') loadAllReviews();
+  else if (pageId === 'search') loadRecentSearches();
+}
+
+function showProductDetail(productId) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.product-nav-item').forEach(n => n.classList.remove('active'));
+  const navEl = document.querySelector(`.product-nav-item[data-id="${productId}"]`);
+  if (navEl) navEl.classList.add('active');
+  document.getElementById('page-product-detail').classList.add('active');
+  currentProductId = productId;
+  loadProductDetail(productId);
+}
+
+// ── Products loading (global) ────────────────────────
+async function loadProducts() {
+  try {
+    products = await fetchJSON('/products');
+    updateSidebarProducts();
+    document.getElementById('tracked-count').textContent = `${products.length}/10`;
+  } catch(e) { console.error(e); }
+}
+
+function updateSidebarProducts() {
+  const el = document.getElementById('sidebar-product-list');
+  if (!products.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:4px 8px;">등록된 상품 없음</div>';
+    return;
+  }
+  el.innerHTML = products.map(p => `
+    <div class="product-nav-item" data-id="${p.id}" onclick="showProductDetail(${p.id})">
+      <div class="dot"></div>
+      <div class="pname">${escHtml(p.name)}</div>
+      ${p.current_rank ? `<div style="font-size:11px;font-family:var(--mono);color:var(--yellow);">#${p.current_rank}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+// ── SEARCH PAGE ──────────────────────────────────────
+async function loadRecentSearches() {
+  try {
+    const history = await fetchJSON('/search-history');
+    const el = document.getElementById('recent-searches');
+    const existingLabel = el.querySelector('.recent-searches-label');
+    el.innerHTML = '';
+    if (existingLabel) el.appendChild(existingLabel);
+    history.forEach(h => {
+      const chip = document.createElement('div');
+      chip.className = 'recent-search-chip';
+      chip.textContent = h.keyword;
+      chip.onclick = () => { document.getElementById('search-input').value = h.keyword; doSearch(); };
+      el.appendChild(chip);
+    });
+  } catch(e) {}
+}
+
+async function doSearch() {
+  const keyword = document.getElementById('search-input').value.trim();
+  if (!keyword) { toast('키워드를 입력해주세요', 'error'); return; }
+
+  currentKeyword = keyword;
+  const container = document.getElementById('search-results-container');
+  container.innerHTML = '<div class="loading"><div class="spinner"></div> 네이버쇼핑에서 상위 40개 상품 수집 중... (약 10~20초 소요)</div>';
+
+  try {
+    const data = await fetchJSON('/search', 'POST', { keyword, limit: 40 });
+    searchResults = data.products;
+    renderSearchResults(searchResults);
+    loadRecentSearches();
+  } catch(e) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">검색 실패</div><div class="empty-desc">${escHtml(e.message)}</div></div>`;
+  }
+}
+
+function renderSearchResults(results) {
+  const container = document.getElementById('search-results-container');
+  if (!results.length) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">😕</div><div class="empty-title">결과 없음</div><div class="empty-desc">다른 키워드로 검색해보세요</div></div>';
+    return;
+  }
+
+  // Check which are already tracked
+  const trackedUrls = new Set(products.map(p => p.url));
+  
+  let html = `
+    <div class="search-results-header">
+      <div class="results-count"><strong>${results.length}개</strong> 상품 · 키워드: <strong>"${escHtml(currentKeyword)}"</strong></div>
+      <div class="filter-chips">
+        <div class="chip active" onclick="filterSearchResults('all', this)">전체</div>
+        <div class="chip" onclick="filterSearchResults('organic', this)">일반</div>
+        <div class="chip" onclick="filterSearchResults('ad', this)">광고</div>
+      </div>
+    </div>
+  `;
+
+  html += results.map(r => {
+    const isTracked = trackedUrls.has(r.url);
+    const rankClass = r.isAd ? '' : (r.rank <= 3 ? 'result-rank-top3' : r.rank <= 10 ? 'result-rank-top10' : r.rank <= 20 ? 'result-rank-top20' : 'result-rank-other');
+    
+    return `
+      <div class="search-result-item ${isTracked ? 'tracked' : ''}" data-is-ad="${r.isAd}">
+        <div class="result-rank">
+          ${r.isAd ? '<div class="result-rank-ad">AD</div>' : `<div class="result-rank-num ${rankClass}">${r.rank}</div>`}
+        </div>
+        <div class="result-thumb">
+          ${r.imageUrl ? `<img src="${escHtml(r.imageUrl)}" onerror="this.parentElement.innerHTML='<div class=result-thumb-placeholder>📦</div>'">` : '<div class="result-thumb-placeholder">📦</div>'}
+        </div>
+        <div class="result-info">
+          <div class="result-title"><a href="${escHtml(r.url)}" target="_blank" style="color:inherit;text-decoration:none;">${escHtml(r.title)}</a></div>
+          <div class="result-meta">
+            ${r.mallName ? `<span class="result-mall">🏪 ${escHtml(r.mallName)}</span>` : ''}
+            ${r.rating ? `<span>⭐ ${r.rating}</span>` : ''}
+            ${r.reviewCount ? `<span>💬 ${r.reviewCount.toLocaleString()}</span>` : ''}
+          </div>
+          ${r.price ? `<div class="result-price">${r.originalPrice && r.originalPrice > r.price ? `<span class="result-orig-price">${r.originalPrice.toLocaleString()}</span>` : ''}${r.price.toLocaleString()}원</div>` : ''}
+        </div>
+        <div class="result-actions">
+          ${isTracked 
+            ? `<button class="btn btn-track tracked btn-sm">✓ 트래킹 중</button>`
+            : `<button class="btn btn-track btn-sm" onclick="openTrackModal(${results.indexOf(r)})">+ 트래킹</button>`
+          }
+          <a href="${escHtml(r.url)}" target="_blank" class="btn btn-secondary btn-sm">🔗 보기</a>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = html;
+}
+
+function filterSearchResults(type, el) {
+  document.querySelectorAll('.search-results-header .chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  const items = document.querySelectorAll('.search-result-item');
+  items.forEach(item => {
+    const isAd = item.dataset.isAd === 'true';
+    if (type === 'all') item.style.display = '';
+    else if (type === 'organic') item.style.display = isAd ? 'none' : '';
+    else if (type === 'ad') item.style.display = isAd ? '' : 'none';
+  });
+}
+
+// ── Track modal ──────────────────────────────────────
+function openTrackModal(idx) {
+  const item = searchResults[idx];
+  pendingTrackItem = item;
+  
+  document.getElementById('track-preview').innerHTML = `
+    <div class="preview-thumb">
+      ${item.imageUrl ? `<img src="${escHtml(item.imageUrl)}">` : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">📦</div>'}
+    </div>
+    <div class="preview-info">
+      <div class="preview-title">${escHtml(item.title)}</div>
+      <div class="preview-meta">${escHtml(item.mallName || '')}${item.price ? ' · ' + item.price.toLocaleString() + '원' : ''}</div>
+    </div>
+  `;
+  document.getElementById('track-keyword').value = currentKeyword;
+  document.getElementById('track-category').value = '';
+  document.getElementById('track-modal').classList.add('open');
+}
+
+function closeTrackModal() {
+  document.getElementById('track-modal').classList.remove('open');
+  pendingTrackItem = null;
+}
+
+async function confirmTrack() {
+  if (!pendingTrackItem) return;
+  const keyword = document.getElementById('track-keyword').value.trim();
+  const category = document.getElementById('track-category').value.trim();
+  if (!keyword) { toast('추적 키워드를 입력해주세요', 'error'); return; }
+
+  try {
+    await fetchJSON('/products', 'POST', {
+      name: pendingTrackItem.title,
+      url: pendingTrackItem.url,
+      tracking_keyword: keyword,
+      product_code: pendingTrackItem.productCode,
+      mall_name: pendingTrackItem.mallName,
+      image_url: pendingTrackItem.imageUrl,
+      category
+    });
+    closeTrackModal();
+    toast('트래킹을 시작했습니다', 'success');
+    await loadProducts();
+    // Re-render search results to show tracked state
+    renderSearchResults(searchResults);
+  } catch(e) {
+    toast(e.message || '트래킹 실패', 'error');
+  }
+}
+
+// ── Dashboard ────────────────────────────────────────
+async function loadDashboard() {
+  await loadProducts();
+  updateOverviewStats();
+  loadRecentReviews();
+  loadProductOverview();
+}
+
+function updateOverviewStats() {
+  const totalReviews = products.reduce((s, p) => s + (p.review_count || 0), 0);
+  const ratings = products.filter(p => p.avg_rating).map(p => p.avg_rating);
+  const avgRating = ratings.length ? (ratings.reduce((a,b)=>a+b,0)/ratings.length).toFixed(1) : '—';
+  const totalSnapshots = products.filter(p => p.last_snapshot_at).length;
+
+  document.getElementById('stat-products').textContent = products.length;
+  document.getElementById('stat-reviews').textContent = totalReviews.toLocaleString();
+  document.getElementById('stat-rating').textContent = avgRating;
+  document.getElementById('stat-snapshots').textContent = totalSnapshots;
+}
+
+async function loadRecentReviews() {
+  const el = document.getElementById('recent-reviews-list');
+  try {
+    const data = await fetchJSON('/reviews?limit=20');
+    if (!data.length) {
+      el.innerHTML = '<div class="empty"><div class="empty-icon">💬</div><div class="empty-title">리뷰가 없습니다</div><div class="empty-desc">상품을 트래킹하면 리뷰가 자동 수집됩니다</div></div>';
+      return;
+    }
+    el.innerHTML = data.map(r => renderReviewItem(r, true)).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">로드 실패</div></div>';
+  }
+}
+
+function loadProductOverview() {
+  const el = document.getElementById('product-overview-list');
+  if (!products.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><div class="empty-title">트래킹 상품 없음</div><div class="empty-desc">검색에서 상품을 추가하세요</div></div>';
+    return;
+  }
+  el.innerHTML = products.map(p => `
+    <div class="product-card" onclick="showProductDetail(${p.id})">
+      ${p.image_url ? `<div class="product-card-thumb"><img src="${escHtml(p.image_url)}" onerror="this.style.display='none'"></div>` : ''}
+      <div class="product-card-info">
+        <div class="product-card-name">${escHtml(p.name)}</div>
+        <div class="product-card-meta">
+          ${p.tracking_keyword ? `<span class="product-card-keyword">${escHtml(p.tracking_keyword)}</span>` : ''}
+          ${p.review_count || 0}개 리뷰
+        </div>
+      </div>
+      <div class="product-card-rank">${p.current_rank ? '#'+p.current_rank : '—'}</div>
+    </div>
+  `).join('');
+}
+
+// ── TRENDS PAGE ──────────────────────────────────────
+async function loadTrendsPage() {
+  await loadProducts();
+  const sel = document.getElementById('trend-product-selector');
+  sel.innerHTML = '<option value="">상품을 선택하세요</option>' +
+    products.map(p => `<option value="${p.id}">${escHtml(p.name.slice(0,50))}${p.name.length > 50 ? '...' : ''}</option>`).join('');
+}
+
+async function loadTrendDetail(productId) {
+  if (!productId) return;
+  const el = document.getElementById('trend-content');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div> 추이 데이터 로딩...</div>';
+
+  try {
+    const [snapshots, product] = await Promise.all([
+      fetchJSON(`/products/${productId}/snapshots`),
+      Promise.resolve(products.find(p => p.id == productId))
+    ]);
+
+    if (!snapshots.length) {
+      el.innerHTML = `
+        <div class="empty">
+          <div class="empty-icon">📊</div>
+          <div class="empty-title">아직 수집된 추이 데이터가 없습니다</div>
+          <div class="empty-desc">첫 스냅샷이 수집되면 여기에 그래프가 표시됩니다</div>
+          <button class="btn btn-primary btn-sm" style="margin-top:16px;" onclick="crawlSingle(${productId}, this)">지금 수집하기</button>
+        </div>
+      `;
+      return;
+    }
+
+    renderTrendDetail(product, snapshots);
+  } catch(e) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">로드 실패</div><div class="empty-desc">${escHtml(e.message)}</div></div>`;
+  }
+}
+
+function renderTrendDetail(product, snapshots) {
+  const el = document.getElementById('trend-content');
+  
+  // Compute deltas
+  const latest = snapshots[snapshots.length - 1];
+  const first = snapshots[0];
+  
+  const rankChange = (first.search_rank && latest.search_rank) ? latest.search_rank - first.search_rank : null;
+  const priceChange = (first.price && latest.price) ? latest.price - first.price : null;
+  const reviewChange = (first.review_count && latest.review_count) ? latest.review_count - first.review_count : null;
+  const ratingChange = (first.rating && latest.rating) ? +(latest.rating - first.rating).toFixed(2) : null;
+
+  el.innerHTML = `
+    <div style="margin-bottom: 24px;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
+        ${product.image_url ? `<div style="width:50px;height:50px;border-radius:8px;overflow:hidden;background:var(--bg3);"><img src="${escHtml(product.image_url)}" style="width:100%;height:100%;object-fit:cover;"></div>` : ''}
+        <div>
+          <div style="font-size:16px;font-weight:700;">${escHtml(product.name)}</div>
+          <div style="font-size:12px;color:var(--text3);font-family:var(--mono);margin-top:2px;">
+            <span class="product-card-keyword">${escHtml(product.tracking_keyword || '')}</span>
+            ${snapshots.length}개 스냅샷 · ${first.recorded_at?.slice(0,16)} ~ ${latest.recorded_at?.slice(0,16)}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
+      <div class="trend-card">
+        <div class="trend-card-header">
+          <div>
+            <div class="stat-label">검색 순위</div>
+            <div class="trend-current-value" style="color:var(--yellow);">${latest.search_rank ? '#'+latest.search_rank : '—'}</div>
+            ${renderDeltaBadge(rankChange, true)}
+          </div>
+        </div>
+        <div class="trend-chart-container"><canvas id="mini-rank"></canvas></div>
+      </div>
+      <div class="trend-card">
+        <div class="trend-card-header">
+          <div>
+            <div class="stat-label">판매가</div>
+            <div class="trend-current-value" style="color:var(--green);">${latest.price ? latest.price.toLocaleString()+'원' : '—'}</div>
+            ${renderDeltaBadge(priceChange, false, '원')}
+          </div>
+        </div>
+        <div class="trend-chart-container"><canvas id="mini-price"></canvas></div>
+      </div>
+      <div class="trend-card">
+        <div class="trend-card-header">
+          <div>
+            <div class="stat-label">리뷰 수</div>
+            <div class="trend-current-value" style="color:var(--accent);">${latest.review_count ? latest.review_count.toLocaleString() : '—'}</div>
+            ${renderDeltaBadge(reviewChange, false, '개')}
+          </div>
+        </div>
+        <div class="trend-chart-container"><canvas id="mini-review"></canvas></div>
+      </div>
+      <div class="trend-card">
+        <div class="trend-card-header">
+          <div>
+            <div class="stat-label">별점</div>
+            <div class="trend-current-value" style="color:var(--orange);">${latest.rating || '—'}</div>
+            ${renderDeltaBadge(ratingChange, false, '')}
+          </div>
+        </div>
+        <div class="trend-chart-container"><canvas id="mini-rating"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px;">
+      <div class="card-header">
+        <div class="card-title">📊 통합 추이 그래프</div>
+        <div class="filter-chips">
+          <div class="chip active" onclick="switchTrendMetric('rank', this)">순위</div>
+          <div class="chip" onclick="switchTrendMetric('price', this)">가격</div>
+          <div class="chip" onclick="switchTrendMetric('review', this)">리뷰</div>
+          <div class="chip" onclick="switchTrendMetric('rating', this)">별점</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div style="height:300px;position:relative;"><canvas id="main-trend-chart"></canvas></div>
+      </div>
+    </div>
+  `;
+
+  // Render charts
+  window._currentSnapshots = snapshots;
+  renderMiniCharts(snapshots);
+  renderMainTrendChart(snapshots, 'rank');
+}
+
+function renderDeltaBadge(delta, inverse = false, unit = '') {
+  if (delta === null || delta === 0 || delta === undefined) {
+    return `<div class="trend-change neutral">— 변동 없음</div>`;
+  }
+  // For rank, lower is better so up arrow when rank decreased (went up)
+  const isPositive = inverse ? delta < 0 : delta > 0;
+  const absVal = Math.abs(delta);
+  const arrow = isPositive ? '▲' : '▼';
+  const cls = isPositive ? 'up' : 'down';
+  const display = unit === '원' ? absVal.toLocaleString() : absVal;
+  return `<div class="trend-change ${cls}">${arrow} ${display}${unit}</div>`;
+}
+
+function renderMiniCharts(snapshots) {
+  Object.values(miniCharts).forEach(c => c?.destroy());
+  miniCharts = {};
+  
+  const labels = snapshots.map((_, i) => i);
+  const metrics = {
+    rank: { data: snapshots.map(s => s.search_rank), color: '#f7c948', inverted: true },
+    price: { data: snapshots.map(s => s.price), color: '#22c87a' },
+    review: { data: snapshots.map(s => s.review_count), color: '#4f8ef7' },
+    rating: { data: snapshots.map(s => s.rating), color: '#f79948' }
+  };
+
+  Object.entries(metrics).forEach(([key, m]) => {
+    const canvas = document.getElementById(`mini-${key}`);
+    if (!canvas) return;
+    miniCharts[key] = new Chart(canvas, {
+      type: 'line',
+      data: { labels, datasets: [{ data: m.data, borderColor: m.color, backgroundColor: m.color + '20', borderWidth: 1.5, tension: 0.4, pointRadius: 0, fill: true }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        scales: {
+          x: { display: false },
+          y: { display: false, reverse: m.inverted || false }
+        },
+        animation: { duration: 600 }
+      }
+    });
+  });
+}
+
+function renderMainTrendChart(snapshots, metric) {
+  if (trendChart) trendChart.destroy();
+  
+  const ctx = document.getElementById('main-trend-chart');
+  if (!ctx) return;
+
+  const labels = snapshots.map(s => s.recorded_at?.slice(5, 16) || '');
+  const config = {
+    rank: { data: snapshots.map(s => s.search_rank), label: '검색 순위', color: '#f7c948', inverted: true },
+    price: { data: snapshots.map(s => s.price), label: '판매가 (원)', color: '#22c87a' },
+    review: { data: snapshots.map(s => s.review_count), label: '리뷰 수', color: '#4f8ef7' },
+    rating: { data: snapshots.map(s => s.rating), label: '별점', color: '#f79948' }
+  };
+
+  const c = config[metric];
+  trendChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: c.label,
+        data: c.data,
+        borderColor: c.color,
+        backgroundColor: c.color + '15',
+        borderWidth: 2,
+        tension: 0.3,
+        pointRadius: 3,
+        pointHoverRadius: 6,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#8891a8' } } },
+      scales: {
+        x: { ticks: { color: '#555d72', font: { size: 10, family: 'DM Mono' } }, grid: { color: '#22262f' } },
+        y: { ticks: { color: '#8891a8', font: { size: 11 } }, grid: { color: '#22262f' }, reverse: c.inverted || false }
+      }
+    }
+  });
+}
+
+function switchTrendMetric(metric, el) {
+  document.querySelectorAll('.card-header .chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  if (window._currentSnapshots) renderMainTrendChart(window._currentSnapshots, metric);
+}
+
+// ── Products Page ────────────────────────────────────
+async function loadProductsPage() {
+  await loadProducts();
+  const el = document.getElementById('products-list');
+  document.getElementById('product-count-label').textContent = `(${products.length}/10)`;
+  
+  if (!products.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><div class="empty-title">트래킹 상품이 없습니다</div><div class="empty-desc">키워드 검색에서 상품을 찾아 트래킹을 시작하세요</div></div>';
+    return;
+  }
+
+  el.innerHTML = products.map(p => `
+    <div class="product-card">
+      ${p.image_url ? `<div class="product-card-thumb"><img src="${escHtml(p.image_url)}" onerror="this.style.display='none'"></div>` : '<div style="width:60px;height:60px;"></div>'}
+      <div class="product-card-info">
+        <div class="product-card-name">${escHtml(p.name)}</div>
+        <div class="product-card-meta">
+          ${p.tracking_keyword ? `<span class="product-card-keyword">🔎 ${escHtml(p.tracking_keyword)}</span>` : '<span style="color:var(--red);">키워드 미설정</span>'}
+          ${p.mall_name ? `· ${escHtml(p.mall_name)}` : ''}
+          · 리뷰 ${p.review_count || 0}
+          · 평점 ${p.avg_rating || '—'}
+          · ${p.last_snapshot_at ? '최근 스냅샷: '+p.last_snapshot_at.slice(0,16) : '미수집'}
+        </div>
+      </div>
+      <div class="product-card-rank">${p.current_rank ? '#'+p.current_rank : '—'}</div>
+      <div class="product-card-actions">
+        <button class="btn btn-secondary btn-sm" onclick="showProductDetail(${p.id})">상세</button>
+        <button class="btn btn-secondary btn-sm" onclick="crawlSingle(${p.id}, this)">⟳ 수집</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.id})">삭제</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Product Detail ───────────────────────────────────
+async function loadProductDetail(productId) {
+  const el = document.getElementById('product-detail-content');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div> 로딩 중...</div>';
+  
+  await loadProducts();
+  const product = products.find(p => p.id === productId);
+  document.getElementById('topbar-title').textContent = product?.name || '상품 상세';
+
+  const [stats, reviewsData, snapshots] = await Promise.all([
+    fetchJSON(`/products/${productId}/stats`),
+    fetchJSON(`/products/${productId}/reviews?limit=30`),
+    fetchJSON(`/products/${productId}/snapshots`)
+  ]);
+
+  const { overall, distribution, keywords } = stats;
+  const reviews = reviewsData.reviews || [];
+  const latest = snapshots[snapshots.length - 1];
+
+  el.innerHTML = `
+    <div class="section-header">
+      <div style="display:flex;align-items:center;gap:12px;">
+        ${product?.image_url ? `<div style="width:60px;height:60px;border-radius:10px;overflow:hidden;background:var(--bg3);"><img src="${escHtml(product.image_url)}" style="width:100%;height:100%;object-fit:cover;"></div>` : ''}
+        <div>
+          <div class="section-title">${escHtml(product?.name || '')}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px;font-family:var(--mono);">
+            ${product?.tracking_keyword ? `<span class="product-card-keyword">🔎 ${escHtml(product.tracking_keyword)}</span>` : ''}
+            ${product?.mall_name ? escHtml(product.mall_name) : ''}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary btn-sm" onclick="crawlSingle(${productId}, this)">⟳ 지금 수집</button>
+        <a href="${product?.url}" target="_blank" class="btn btn-secondary btn-sm">🔗 상품 보기</a>
+      </div>
+    </div>
+
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;">
+      <div class="stat-card">
+        <div class="stat-label">현재 순위</div>
+        <div class="stat-value stat-yellow">${latest?.search_rank ? '#'+latest.search_rank : '—'}</div>
+        <div class="stat-sub">"${escHtml(product?.tracking_keyword || '')}"</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">판매가</div>
+        <div class="stat-value stat-green" style="font-size:24px;">${latest?.price ? latest.price.toLocaleString()+'원' : '—'}</div>
+        <div class="stat-sub">최근 스냅샷 기준</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">총 리뷰</div>
+        <div class="stat-value stat-accent">${(overall?.total || 0).toLocaleString()}</div>
+        <div class="stat-sub">수집된 리뷰</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">평균 평점</div>
+        <div class="stat-value" style="color:var(--orange);">${overall?.avg_rating || '—'}</div>
+        <div class="stat-sub">⭐ ${overall?.photo_count || 0}개 포토리뷰</div>
+      </div>
+    </div>
+
+    ${snapshots.length > 1 ? `
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-header">
+        <div class="card-title">📈 추이 미리보기 (${snapshots.length}개 스냅샷)</div>
+        <button class="btn btn-secondary btn-sm" onclick="showPage('trends', document.querySelector('[data-page=trends]'));setTimeout(()=>{document.getElementById('trend-product-selector').value=${productId};loadTrendDetail(${productId});},200)">상세 추이 보기 →</button>
+      </div>
+      <div class="card-body">
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:0;">
+          <div class="trend-card"><div class="stat-label">순위 추이</div><div class="trend-chart-container"><canvas id="pd-rank"></canvas></div></div>
+          <div class="trend-card"><div class="stat-label">가격 추이</div><div class="trend-chart-container"><canvas id="pd-price"></canvas></div></div>
+          <div class="trend-card"><div class="stat-label">리뷰 추이</div><div class="trend-chart-container"><canvas id="pd-review"></canvas></div></div>
+          <div class="trend-card"><div class="stat-label">별점 추이</div><div class="trend-chart-container"><canvas id="pd-rating"></canvas></div></div>
+        </div>
+      </div>
+    </div>
+    ` : ''}
+
+    <div class="grid-2" style="margin-bottom:20px;">
+      <div class="card">
+        <div class="card-header"><div class="card-title">📊 별점 분포</div></div>
+        <div class="card-body">${renderRatingBars(distribution, overall?.total)}</div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">🏷️ 주요 키워드</div></div>
+        <div class="card-body">
+          <div class="keywords-cloud">
+            ${keywords?.slice(0,20).map(k => `<div class="keyword-tag">${escHtml(k.word)}<span class="kcount">${k.count}</span></div>`).join('') || '<span style="color:var(--text3);font-size:12px;">리뷰 없음</span>'}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ai-panel card" style="margin-bottom:20px;">
+      <div class="card-header">
+        <div class="ai-header">
+          <div class="ai-icon">🤖</div>
+          <div class="card-title">AI 리뷰 분석</div>
+          <div class="ai-badge">Claude AI</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="ai-tabs" style="margin-bottom:14px;">
+          <button class="ai-tab active" data-type="summary" onclick="selectAiTab(this)">📝 종합 요약</button>
+          <button class="ai-tab" data-type="complaints" onclick="selectAiTab(this)">⚠️ 불만 패턴</button>
+          <button class="ai-tab" data-type="strengths" onclick="selectAiTab(this)">✅ 강점 분석</button>
+          <button class="ai-tab" data-type="opportunities" onclick="selectAiTab(this)">💡 시장 기회</button>
+          <button class="ai-tab" data-type="competitive" onclick="selectAiTab(this)">🎯 경쟁 인사이트</button>
+        </div>
+        <div class="ai-output" id="ai-output-${productId}"></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:12px;gap:8px;">
+          <button class="btn btn-ai btn-sm" onclick="runAiAnalysis(${productId})">✨ AI 분석 실행</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">💬 리뷰 목록 <span style="color:var(--text3);font-size:12px;font-family:var(--mono);">(${reviews.length}개)</span></div>
+        <div class="filter-chips">
+          <div class="chip active" onclick="filterDetailReviews(null, this, ${productId})">전체</div>
+          <div class="chip" onclick="filterDetailReviews(5, this, ${productId})">⭐5</div>
+          <div class="chip" onclick="filterDetailReviews(4, this, ${productId})">⭐4</div>
+          <div class="chip" onclick="filterDetailReviews(3, this, ${productId})">⭐3</div>
+          <div class="chip" onclick="filterDetailReviews(2, this, ${productId})">⭐2</div>
+          <div class="chip" onclick="filterDetailReviews(1, this, ${productId})">⭐1</div>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0 20px;" id="detail-reviews-list-${productId}">
+        ${reviews.length ? reviews.map(r => renderReviewItem(r, false)).join('') : '<div class="empty"><div class="empty-icon">💬</div><div class="empty-title">수집된 리뷰 없음</div></div>'}
+      </div>
+    </div>
+  `;
+
+  // Render mini charts for snapshot preview
+  if (snapshots.length > 1) {
+    setTimeout(() => {
+      const makeMini = (id, data, color, inverted) => {
+        const canvas = document.getElementById(id);
+        if (!canvas) return;
+        new Chart(canvas, {
+          type: 'line',
+          data: { labels: data.map((_,i)=>i), datasets: [{ data, borderColor: color, backgroundColor: color+'20', borderWidth: 1.5, tension: 0.4, pointRadius: 0, fill: true }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false, reverse: inverted || false } } }
+        });
+      };
+      makeMini('pd-rank', snapshots.map(s => s.search_rank), '#f7c948', true);
+      makeMini('pd-price', snapshots.map(s => s.price), '#22c87a');
+      makeMini('pd-review', snapshots.map(s => s.review_count), '#4f8ef7');
+      makeMini('pd-rating', snapshots.map(s => s.rating), '#f79948');
+    }, 100);
+  }
+
+  loadSavedAnalysis(productId);
+}
+
+// ── AI Analysis ──────────────────────────────────────
+let selectedAiType = 'summary';
+function selectAiTab(el) {
+  document.querySelectorAll('.ai-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  selectedAiType = el.dataset.type;
+}
+
+async function runAiAnalysis(productId) {
+  const outputEl = document.getElementById(`ai-output-${productId}`);
+  outputEl.textContent = '분석 중...';
+
+  const { reviews } = await fetchJSON(`/products/${productId}/reviews?limit=100`);
+  const product = products.find(p => p.id === productId);
+
+  if (!reviews?.length) {
+    outputEl.textContent = '분석할 리뷰가 없습니다. 먼저 리뷰를 수집해주세요.';
+    return;
+  }
+
+  const reviewTexts = reviews.map(r => `[★${r.rating}] ${r.content || '(내용없음)'}`).join('\n');
+
+  const prompts = {
+    summary: `"${product?.name}" 상품의 고객 리뷰입니다.\n\n${reviewTexts}\n\n종합 분석:\n1. 전반적 만족도\n2. 긍정적 요소 TOP 3\n3. 부정적 요소 TOP 3\n4. 특징적 고객층\n5. 한 줄 요약\n\n한국어로 간결하게 답해주세요.`,
+    complaints: `"${product?.name}" 리뷰입니다.\n\n${reviewTexts}\n\n불만 패턴 분석:\n1. 주요 불만 (빈도순)\n2. 품질 이슈\n3. 배송/포장 불만\n4. CS 이슈\n5. 개선 시급 항목\n\n한국어로.`,
+    strengths: `"${product?.name}" 리뷰입니다.\n\n${reviewTexts}\n\n강점 분석:\n1. 고객이 좋아하는 특징 TOP 5\n2. 재구매 이유\n3. 경쟁사 대비 장점\n4. 가성비 평가\n5. 잘 하고 있는 것\n\n한국어로.`,
+    opportunities: `경쟁사 상품 "${product?.name}" 리뷰입니다.\n\n${reviewTexts}\n\n시장 기회 분석:\n1. 고객이 아쉬워하는 부분 (개선 가능 영역)\n2. 미충족 니즈\n3. 포지셔닝 기회\n4. 새로운 기능 아이디어\n5. 이 고객 공략 전략\n\n한국어로.`,
+    competitive: `경쟁사 "${product?.name}" 리뷰입니다.\n\n${reviewTexts}\n\n경쟁 인텔리전스:\n1. 핵심 경쟁력\n2. 약점\n3. 고객 충성도\n4. 가격 민감도\n5. 필수 인사이트\n6. 대응 전략\n\n한국어로.`
+  };
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: prompts[selectedAiType] }]
+      })
+    });
+
+    const data = await response.json();
+    const text = data.content?.map(c => c.text || '').join('') || '분석 실패';
+    outputEl.textContent = text;
+
+    await fetchJSON(`/products/${productId}/analyses`, 'POST', { analysis_type: selectedAiType, content: text });
+    toast('AI 분석 완료', 'success');
+  } catch(e) {
+    outputEl.textContent = '오류: ' + e.message;
+    toast('분석 실패', 'error');
+  }
+}
+
+async function loadSavedAnalysis(productId) {
+  try {
+    const analyses = await fetchJSON(`/products/${productId}/analyses`);
+    if (analyses.length) {
+      const latest = analyses[0];
+      const outputEl = document.getElementById(`ai-output-${productId}`);
+      if (outputEl) {
+        outputEl.textContent = `[저장된 분석 - ${latest.created_at?.slice(0,16)}]\n\n${latest.content}`;
+        const tab = document.querySelector(`.ai-tab[data-type="${latest.analysis_type}"]`);
+        if (tab) { document.querySelectorAll('.ai-tab').forEach(t => t.classList.remove('active')); tab.classList.add('active'); selectedAiType = latest.analysis_type; }
+      }
+    }
+  } catch(e) {}
+}
+
+// ── All Reviews ──────────────────────────────────────
+async function loadAllReviews() {
+  await loadProducts();
+  const el = document.getElementById('all-reviews-list');
+  try {
+    allReviewsCache = await fetchJSON('/reviews?limit=200');
+    const chips = document.getElementById('review-filter-chips');
+    chips.innerHTML = `<div class="chip active" data-product="all" onclick="filterReviews('all', this)">전체 (${allReviewsCache.length})</div>`;
+    products.forEach(p => {
+      const cnt = allReviewsCache.filter(r => r.product_id === p.id).length;
+      chips.innerHTML += `<div class="chip" data-product="${p.id}" onclick="filterReviews(${p.id}, this)">${escHtml(p.name.slice(0,10))}.. (${cnt})</div>`;
+    });
+    renderAllReviews(allReviewsCache);
+  } catch(e) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">로드 실패</div></div>';
+  }
+}
+
+function filterReviews(productId, el) {
+  document.querySelectorAll('#review-filter-chips .chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  const filtered = productId === 'all' ? allReviewsCache : allReviewsCache.filter(r => r.product_id === productId);
+  renderAllReviews(filtered);
+}
+
+function renderAllReviews(reviews) {
+  const el = document.getElementById('all-reviews-list');
+  if (!reviews.length) { el.innerHTML = '<div class="empty"><div class="empty-title">리뷰 없음</div></div>'; return; }
+  el.innerHTML = reviews.map(r => renderReviewItem(r, true)).join('');
+}
+
+async function filterDetailReviews(rating, el, productId) {
+  document.querySelectorAll('.filter-chips .chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  const url = `/products/${productId}/reviews?limit=50${rating ? '&rating='+rating : ''}`;
+  const { reviews } = await fetchJSON(url);
+  const listEl = document.getElementById(`detail-reviews-list-${productId}`);
+  listEl.innerHTML = reviews.map(r => renderReviewItem(r, false)).join('') || '<div class="empty"><div class="empty-title">해당 평점 리뷰 없음</div></div>';
+}
+
+// ── Actions ──────────────────────────────────────────
+async function deleteProduct(id) {
+  if (!confirm('트래킹을 중단하시겠습니까?')) return;
+  await fetchJSON(`/products/${id}`, 'DELETE');
+  toast('삭제되었습니다', 'success');
+  loadProductsPage();
+}
+
+async function crawlSingle(productId, btn) {
+  btn.classList.add('loading-state');
+  btn.textContent = '⟳ 수집 중...';
+  try {
+    const result = await fetchJSON(`/products/${productId}/crawl`, 'POST');
+    const newReviews = result.reviews?.newReviewCount || 0;
+    const rank = result.snapshot?.rank;
+    toast(`수집 완료: 신규 리뷰 ${newReviews}개${rank ? ', 순위 #'+rank : ''}`, 'success');
+    if (currentProductId === productId) loadProductDetail(productId);
+  } catch(e) {
+    toast('실패: ' + e.message, 'error');
+  } finally {
+    btn.classList.remove('loading-state');
+    btn.textContent = '⟳ 수집';
+  }
+}
+
+async function crawlAll(btn) {
+  btn.classList.add('loading-state');
+  btn.textContent = '⟳ 수집 중...';
+  try {
+    const results = await fetchJSON('/crawl-all', 'POST');
+    const newCount = results.reduce((s, r) => s + (r.reviews?.newReviewCount || 0), 0);
+    toast(`전체 수집 완료: ${newCount}개 신규 리뷰`, 'success');
+    loadProducts();
+  } catch(e) {
+    toast('수집 실패', 'error');
+  } finally {
+    btn.classList.remove('loading-state');
+    btn.textContent = '⟳ 전체 수집';
+  }
+}
+
+// ── Helpers ──────────────────────────────────────────
+function renderReviewItem(r, showProduct) {
+  const stars = Array.from({length:5}, (_,i) => `<span class="star ${i < (r.rating||0) ? 'filled' : 'empty'}">★</span>`).join('');
+  return `
+    <div class="review-item">
+      <div class="review-header">
+        <div>
+          <div class="review-stars">${stars}</div>
+          <div class="review-meta">${r.author || '익명'} · ${r.review_date || r.crawled_at?.slice(0,10) || ''}${showProduct && r.product_name ? ' · ' + escHtml(r.product_name) : ''}</div>
+        </div>
+        <div class="review-badges">
+          ${r.has_photo ? '<span class="badge badge-photo">📷 포토</span>' : ''}
+          ${r.helpful_count > 0 ? `<span class="badge badge-helpful">👍 ${r.helpful_count}</span>` : ''}
+        </div>
+      </div>
+      <div class="review-content">${escHtml(r.content || '(내용 없음)')}</div>
+      ${r.option_info ? `<div class="review-option">옵션: ${escHtml(r.option_info)}</div>` : ''}
+    </div>
+  `;
+}
+
+function renderRatingBars(distribution, total) {
+  if (!distribution?.length) return '<div style="color:var(--text3);font-size:12px;">데이터 없음</div>';
+  const colors = { 5: 'var(--green)', 4: '#7cb9f7', 3: 'var(--yellow)', 2: 'var(--yellow)', 1: 'var(--red)' };
+  return [5,4,3,2,1].map(rating => {
+    const item = distribution.find(d => d.rating === rating);
+    const count = item?.count || 0;
+    const pct = total ? Math.round(count/total*100) : 0;
+    return `<div class="rating-bar-row"><div class="rating-bar-label">${rating}</div><div class="rating-bar-track"><div class="rating-bar-fill" style="width:${pct}%;background:${colors[rating]}"></div></div><div class="rating-bar-count">${count}</div></div>`;
+  }).join('');
+}
+
+async function fetchJSON(path, method = 'GET', body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(API + path, opts);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+function escHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toast(msg, type = 'info') {
+  const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span class="toast-icon">${icons[type]}</span><span>${escHtml(msg)}</span>`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+document.getElementById('track-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeTrackModal();
+});
+</script>
+</body>
+</html>
