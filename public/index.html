@@ -251,6 +251,9 @@
   .product-card-keyword { display: inline-block; font-size: 11px; background: rgba(79,142,247,0.1); color: var(--accent); padding: 2px 8px; border-radius: 4px; margin-right: 6px; }
   .product-card-rank { font-size: 18px; font-weight: 900; font-family: var(--mono); color: var(--yellow); min-width: 40px; text-align: center; }
   .product-card-actions { display: flex; gap: 6px; }
+  .product-card-period { font-size: 12px; padding: 4px 8px; border-radius: 6px; background: var(--bg3); border: 1px solid var(--border); color: var(--text2); font-family: inherit; cursor: pointer; }
+  .product-card-period:hover { border-color: var(--accent); }
+  .product-card-period:focus { outline: none; border-color: var(--accent); }
 
   .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 12px; }
   .section-title { font-size: 15px; font-weight: 700; }
@@ -752,9 +755,32 @@ function loadProductOverview() {
           ${p.review_count || 0}개 리뷰
         </div>
       </div>
+      <select class="product-card-period" onclick="event.stopPropagation()" onchange="updateReviewPeriod(${p.id}, this.value)">
+        <option value="1w" ${p.review_period === '1w' ? 'selected' : ''}>1주일</option>
+        <option value="1m" ${(p.review_period || '1m') === '1m' ? 'selected' : ''}>1개월</option>
+        <option value="3m" ${p.review_period === '3m' ? 'selected' : ''}>3개월</option>
+        <option value="6m" ${p.review_period === '6m' ? 'selected' : ''}>6개월</option>
+        <option value="all" ${p.review_period === 'all' ? 'selected' : ''}>전체</option>
+      </select>
       <div class="product-card-rank">${p.current_rank ? '#'+p.current_rank : '—'}</div>
     </div>
   `).join('');
+}
+
+// 리뷰 수집 기간 업데이트
+async function updateReviewPeriod(productId, period) {
+  try {
+    const res = await fetch(`/api/products/${productId}/period`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ review_period: period })
+    });
+    if (!res.ok) throw new Error('업데이트 실패');
+    const periodLabel = { '1w': '1주일', '1m': '1개월', '3m': '3개월', '6m': '6개월', 'all': '전체' }[period];
+    console.log('✅ 수집 기간 변경:', periodLabel);
+  } catch (e) {
+    alert('수집 기간 변경 실패: ' + e.message);
+  }
 }
 
 // ── TRENDS PAGE ──────────────────────────────────────
