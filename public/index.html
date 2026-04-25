@@ -1028,6 +1028,13 @@ async function loadProductsPage() {
         </div>
       </div>
       <div class="product-card-rank">${p.current_rank ? '#'+p.current_rank : '—'}</div>
+      <select class="product-card-period" title="리뷰 수집 기간" onchange="updateReviewPeriod(${p.id}, this.value)">
+        <option value="1w" ${p.review_period === '1w' ? 'selected' : ''}>📅 1주일</option>
+        <option value="1m" ${(p.review_period || '1m') === '1m' ? 'selected' : ''}>📅 1개월</option>
+        <option value="3m" ${p.review_period === '3m' ? 'selected' : ''}>📅 3개월</option>
+        <option value="6m" ${p.review_period === '6m' ? 'selected' : ''}>📅 6개월</option>
+        <option value="all" ${p.review_period === 'all' ? 'selected' : ''}>📅 전체</option>
+      </select>
       <div class="product-card-actions">
         <button class="btn btn-secondary btn-sm" onclick="showProductDetail(${p.id})">상세</button>
         <button class="btn btn-secondary btn-sm" onclick="crawlSingle(${p.id}, this)">⟳ 수집</button>
