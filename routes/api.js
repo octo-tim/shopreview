@@ -343,4 +343,50 @@ router.post('/external/reviews', (req, res) => {
   }
 });
 
+
+// POST: 외부 크롤러가 리뷰 수/별점 스냅샷 업데이트
+router.post('/external/snapshot', (req, res) => {
+  const token = req.headers['x-crawler-token'];
+  if (!process.env.CRAWLER_TOKEN || token !== process.env.CRAWLER_TOKEN) {
+    return res.status(401).json({ error: '인증 실패' });
+  }
+  
+  const { product_id, review_count, rating } = req.body;
+  if (!product_id) return res.status(400).json({ error: 'product_id 필요' });
+  
+  const db = getDb();
+  try {
+    // 가장 최근 snapshot 찾아서 review_count, rating 업데이트
+    const latest = db.prepare(`
+      SELECT id FROM snapshots 
+      WHERE product_id = ? 
+      ORDER BY recorded_at DESC 
+      LIMIT 1
+    `).get(product_id);
+    
+    if (latest) {
+      db.prepare(`
+        UPDATE snapshots 
+        SET review_count = COALESCE(?, review_count), 
+            rating = COALESCE(?, rating) 
+        WHERE id = ?
+      `).run(review_count, rating, latest.id);
+      
+      console.log('📊 스냅샷 업데이트: product_id=' + product_id + ', reviews=' + review_count + ', rating=' + rating);
+      res.json({ success: true, snapshot_id: latest.id });
+    } else {
+      // 스냅샷이 없으면 새로 생성
+      db.prepare(`
+        INSERT INTO snapshots (product_id, review_count, rating)
+        VALUES (?, ?, ?)
+      `).run(product_id, review_count || null, rating || null);
+      
+      res.json({ success: true, created: true });
+    }
+  } catch (e) {
+    console.error('스냅샷 업데이트 실패: ' + e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
