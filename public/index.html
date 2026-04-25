@@ -487,6 +487,7 @@ const API = '/api';
 let products = [];
 let currentProductId = null;
 let allReviewsCache = [];
+let allReviewsState = { offset: 0, total: 0, hasMore: true, loading: false, filterProductId: 'all' };
 let searchResults = [];
 let pendingTrackItem = null;
 let currentKeyword = '';
@@ -1270,32 +1271,111 @@ async function loadSavedAnalysis(productId) {
 // ── All Reviews ──────────────────────────────────────
 async function loadAllReviews() {
   await loadProducts();
+  allReviewsCache = [];
+  allReviewsState = { offset: 0, total: 0, hasMore: true, loading: false, filterProductId: 'all' };
+  
   const el = document.getElementById('all-reviews-list');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div> 로딩 중...</div>';
+  
   try {
-    allReviewsCache = await fetchJSON('/reviews?limit=200');
+    await loadMoreReviews();
+    
     const chips = document.getElementById('review-filter-chips');
-    chips.innerHTML = `<div class="chip active" data-product="all" onclick="filterReviews('all', this)">전체 (${allReviewsCache.length})</div>`;
+    chips.innerHTML = `<div class="chip active" data-product="all" onclick="filterReviews('all', this)">전체 (${allReviewsState.total})</div>`;
     products.forEach(p => {
-      const cnt = allReviewsCache.filter(r => r.product_id === p.id).length;
-      chips.innerHTML += `<div class="chip" data-product="${p.id}" onclick="filterReviews(${p.id}, this)">${escHtml(p.name.slice(0,10))}.. (${cnt})</div>`;
+      chips.innerHTML += `<div class="chip" data-product="${p.id}" onclick="filterReviews(${p.id}, this)">${escHtml(p.name.slice(0,10))}.. (${p.review_count || 0})</div>`;
     });
-    renderAllReviews(allReviewsCache);
+    
+    setupInfiniteScroll();
   } catch(e) {
     el.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">로드 실패</div></div>';
   }
 }
 
-function filterReviews(productId, el) {
-  document.querySelectorAll('#review-filter-chips .chip').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-  const filtered = productId === 'all' ? allReviewsCache : allReviewsCache.filter(r => r.product_id === productId);
-  renderAllReviews(filtered);
+async function loadMoreReviews() {
+  if (allReviewsState.loading || !allReviewsState.hasMore) return;
+  allReviewsState.loading = true;
+  
+  try {
+    const data = await fetchJSON(`/reviews?limit=50&offset=${allReviewsState.offset}`);
+    
+    if (allReviewsState.offset === 0 && allReviewsState.filterProductId === 'all') {
+      allReviewsCache = [];
+      document.getElementById('all-reviews-list').innerHTML = '';
+    }
+    
+    let newReviews = data.reviews || [];
+    if (allReviewsState.filterProductId !== 'all') {
+      newReviews = newReviews.filter(r => r.product_id === allReviewsState.filterProductId);
+    }
+    
+    allReviewsCache = allReviewsCache.concat(newReviews);
+    allReviewsState.offset += data.reviews.length;
+    allReviewsState.total = data.total;
+    allReviewsState.hasMore = data.hasMore;
+    
+    appendReviewsToList(newReviews);
+  } catch(e) {
+    console.error('리뷰 로드 실패', e);
+  } finally {
+    allReviewsState.loading = false;
+  }
 }
 
-function renderAllReviews(reviews) {
+function appendReviewsToList(reviews) {
   const el = document.getElementById('all-reviews-list');
-  if (!reviews.length) { el.innerHTML = '<div class="empty"><div class="empty-title">리뷰 없음</div></div>'; return; }
-  el.innerHTML = reviews.map(r => renderReviewItem(r, true)).join('');
+  if (!allReviewsCache.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-title">리뷰 없음</div></div>';
+    return;
+  }
+  
+  // 이전 sentinel 제거
+  const oldSentinel = document.getElementById('reviews-sentinel');
+  if (oldSentinel) oldSentinel.remove();
+  
+  // 새 리뷰 추가
+  const newHtml = reviews.map(r => renderReviewItem(r, true)).join('');
+  el.insertAdjacentHTML('beforeend', newHtml);
+  
+  // 무한 스크롤 sentinel
+  if (allReviewsState.hasMore) {
+    el.insertAdjacentHTML('beforeend', '<div id="reviews-sentinel" style="text-align:center;padding:20px;color:var(--text3);font-size:13px;">⏳ 스크롤하여 더 보기...</div>');
+  } else if (allReviewsCache.length > 0) {
+    el.insertAdjacentHTML('beforeend', `<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px;">✓ 모든 리뷰를 불러왔습니다 (${allReviewsCache.length}개)</div>`);
+  }
+}
+
+function setupInfiniteScroll() {
+  if (window._reviewObserver) window._reviewObserver.disconnect();
+  
+  window._reviewObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting && !allReviewsState.loading && allReviewsState.hasMore) {
+        loadMoreReviews();
+      }
+    });
+  }, { rootMargin: '200px' });
+  
+  // sentinel 생기면 observe
+  setInterval(() => {
+    const sentinel = document.getElementById('reviews-sentinel');
+    if (sentinel && !sentinel._observed) {
+      window._reviewObserver.observe(sentinel);
+      sentinel._observed = true;
+    }
+  }, 500);
+}
+
+async function filterReviews(productId, el) {
+  document.querySelectorAll('#review-filter-chips .chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  
+  // 상태 리셋
+  allReviewsCache = [];
+  allReviewsState = { offset: 0, total: 0, hasMore: true, loading: false, filterProductId: productId };
+  document.getElementById('all-reviews-list').innerHTML = '<div class="loading"><div class="spinner"></div> 로딩 중...</div>';
+  
+  await loadMoreReviews();
 }
 
 async function filterDetailReviews(rating, el, productId) {

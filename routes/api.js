@@ -220,14 +220,23 @@ router.get('/products/:id/stats', (req, res) => {
 
 router.get('/reviews', (req, res) => {
   const db = getDb();
-  const { limit = 50 } = req.query;
+  const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+  const offset = parseInt(req.query.offset) || 0;
+  
   const reviews = db.prepare(`
     SELECT r.*, p.name as product_name FROM reviews r
     JOIN products p ON p.id = r.product_id
     WHERE p.active = 1
-    ORDER BY r.crawled_at DESC LIMIT ?
-  `).all(limit);
-  res.json(reviews);
+    ORDER BY r.crawled_at DESC LIMIT ? OFFSET ?
+  `).all(limit, offset);
+  
+  const total = db.prepare(`
+    SELECT COUNT(*) as cnt FROM reviews r
+    JOIN products p ON p.id = r.product_id
+    WHERE p.active = 1
+  `).get().cnt;
+  
+  res.json({ reviews, total, limit, offset, hasMore: offset + reviews.length < total });
 });
 
 // ─── AI Analysis ────────────────────────────────────
