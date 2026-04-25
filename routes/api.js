@@ -267,4 +267,80 @@ function extractKeywords(texts) {
   return Object.entries(freq).sort((a,b) => b[1]-a[1]).slice(0, 30).map(([word, count]) => ({ word, count }));
 }
 
+
+// ═══════════════════════════════════════════════════════════
+// 외부 크롤러 (NCP 서버) 연동 API
+// ═══════════════════════════════════════════════════════════
+
+// GET: 외부 크롤러가 트래킹 상품 목록 조회
+router.get('/external/products', (req, res) => {
+  const token = req.headers['x-crawler-token'];
+  if (!process.env.CRAWLER_TOKEN || token !== process.env.CRAWLER_TOKEN) {
+    return res.status(401).json({ error: '인증 실패' });
+  }
+  
+  const db = getDb();
+  const products = db.prepare(`
+    SELECT id, name, url, tracking_keyword, last_crawled_at
+    FROM products WHERE active = 1
+    ORDER BY (last_crawled_at IS NULL) DESC, last_crawled_at ASC
+  `).all();
+  
+  res.json(products);
+});
+
+// POST: 외부 크롤러가 수집한 리뷰 업로드
+router.post('/external/reviews', (req, res) => {
+  const token = req.headers['x-crawler-token'];
+  if (!process.env.CRAWLER_TOKEN || token !== process.env.CRAWLER_TOKEN) {
+    return res.status(401).json({ error: '인증 실패' });
+  }
+  
+  const { product_id, reviews } = req.body;
+  if (!product_id || !Array.isArray(reviews)) {
+    return res.status(400).json({ error: 'product_id, reviews 배열 필요' });
+  }
+  
+  const db = getDb();
+  const product = db.prepare('SELECT * FROM products WHERE id = ?').get(product_id);
+  if (!product) return res.status(404).json({ error: '상품 없음' });
+  
+  const insertReview = db.prepare(`
+    INSERT OR IGNORE INTO reviews 
+    (product_id, review_id, author, rating, content, option_info, helpful_count, has_photo, review_date)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  
+  let newCount = 0;
+  const insertMany = db.transaction((list) => {
+    for (const r of list) {
+      const result = insertReview.run(
+        product_id,
+        r.reviewId || 'ext_' + Date.now() + '_' + Math.random().toString(36).substr(2,9),
+        r.author || '',
+        r.rating || null,
+        r.content || '',
+        r.option || '',
+        r.helpful || 0,
+        r.hasPhoto ? 1 : 0,
+        r.date || ''
+      );
+      if (result.changes > 0) newCount++;
+    }
+  });
+  
+  try {
+    insertMany(reviews);
+    db.prepare(`UPDATE products SET last_crawled_at = datetime('now','localtime') WHERE id = ?`).run(product_id);
+    db.prepare(`INSERT INTO crawl_logs (product_id, crawl_type, status, reviews_found, new_reviews) VALUES (?, 'external', 'success', ?, ?)`)
+      .run(product_id, reviews.length, newCount);
+    
+    console.log('📥 외부 크롤러: [' + product.name.substring(0,40) + '] ' + reviews.length + '개 수신, ' + newCount + '개 신규');
+    res.json({ success: true, received: reviews.length, newCount });
+  } catch (e) {
+    console.error('외부 리뷰 저장 실패: ' + e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
