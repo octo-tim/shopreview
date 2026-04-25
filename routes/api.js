@@ -281,7 +281,7 @@ router.get('/external/products', (req, res) => {
   
   const db = getDb();
   const products = db.prepare(`
-    SELECT id, name, url, tracking_keyword, last_crawled_at
+    SELECT id, name, url, tracking_keyword, last_crawled_at, review_period
     FROM products WHERE active = 1
     ORDER BY (last_crawled_at IS NULL) DESC, last_crawled_at ASC
   `).all();
@@ -385,6 +385,27 @@ router.post('/external/snapshot', (req, res) => {
     }
   } catch (e) {
     console.error('스냅샷 업데이트 실패: ' + e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
+// PATCH: 상품의 리뷰 수집 기간 업데이트
+router.patch('/products/:id/period', (req, res) => {
+  const { id } = req.params;
+  const { review_period } = req.body;
+  
+  const validPeriods = ['1w', '1m', '3m', '6m', 'all'];
+  if (!validPeriods.includes(review_period)) {
+    return res.status(400).json({ error: '유효한 기간: 1w, 1m, 3m, 6m, all' });
+  }
+  
+  const db = getDb();
+  try {
+    const result = db.prepare('UPDATE products SET review_period = ? WHERE id = ?').run(review_period, id);
+    if (result.changes === 0) return res.status(404).json({ error: '상품 없음' });
+    res.json({ success: true, review_period });
+  } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });

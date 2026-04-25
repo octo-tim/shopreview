@@ -94,6 +94,18 @@ function initSchema() {
       search_count INTEGER DEFAULT 1
     );
   `);
+
+  // 마이그레이션: products.review_period 컬럼 추가 (안전하게)
+  try {
+    const cols = db.prepare("PRAGMA table_info(products)").all();
+    const hasPeriod = cols.some(c => c.name === 'review_period');
+    if (!hasPeriod) {
+      db.exec("ALTER TABLE products ADD COLUMN review_period TEXT DEFAULT '1m'");
+      console.log('✅ products.review_period 컬럼 추가됨');
+    }
+  } catch (e) {
+    console.error('마이그레이션 실패:', e.message);
+  }
 }
 
 module.exports = { getDb };
