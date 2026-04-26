@@ -579,4 +579,82 @@ router.patch('/products/:id/classify', (req, res) => {
   }
 });
 
+
+// ─── Dashboard API ───────────────────────────────────
+router.get('/dashboard', (req, res) => {
+  const db = getDb();
+  
+  // 오늘 (한국 시간 기준 자정~)
+  const today = new Date();
+  const kstOffset = 9 * 60 * 60 * 1000;
+  const kstNow = new Date(today.getTime() + kstOffset);
+  const todayStr = kstNow.toISOString().substring(0, 10);
+  
+  // 1. 오늘 신규 리뷰 (수집 시점 기준)
+  const todayReviews = db.prepare(`
+    SELECT r.*, p.name as product_name, p.brand, p.product_category, p.image_url
+    FROM reviews r
+    JOIN products p ON p.id = r.product_id
+    WHERE p.active = 1 AND date(r.crawled_at) = date('now', 'localtime')
+    ORDER BY r.crawled_at DESC
+  `).all();
+  
+  // 2. KPI
+  const todayCount = todayReviews.length;
+  const warningCount = todayReviews.filter(r => (r.quality_score || 0) < 45).length;
+  const avgQuality = todayReviews.length > 0
+    ? Math.round(todayReviews.reduce((s, r) => s + (r.quality_score || 0), 0) / todayReviews.length)
+    : null;
+  const avgRating = todayReviews.length > 0
+    ? (todayReviews.reduce((s, r) => s + (r.rating || 0), 0) / todayReviews.length).toFixed(1)
+    : null;
+  
+  // 3. 주의 리뷰 (품질 < 45점)
+  const warningReviews = todayReviews
+    .filter(r => (r.quality_score || 0) < 45)
+    .slice(0, 30);
+  
+  // 4. 상품별 오늘 현황
+  const productStats = db.prepare(`
+    SELECT 
+      p.id, p.name, p.brand, p.product_category, p.image_url,
+      COUNT(r.id) as today_count,
+      AVG(r.quality_score) as avg_quality,
+      AVG(r.rating) as avg_rating,
+      SUM(CASE WHEN r.quality_score < 45 THEN 1 ELSE 0 END) as warning_count
+    FROM products p
+    LEFT JOIN reviews r ON r.product_id = p.id AND date(r.crawled_at) = date('now', 'localtime')
+    WHERE p.active = 1
+    GROUP BY p.id
+    ORDER BY today_count DESC, p.name ASC
+  `).all();
+  
+  // 5. 브랜드별 집계
+  const brandStats = db.prepare(`
+    SELECT 
+      COALESCE(p.brand, '미분류') as brand,
+      COUNT(DISTINCT p.id) as product_count,
+      COUNT(r.id) as today_count,
+      AVG(r.quality_score) as avg_quality
+    FROM products p
+    LEFT JOIN reviews r ON r.product_id = p.id AND date(r.crawled_at) = date('now', 'localtime')
+    WHERE p.active = 1
+    GROUP BY COALESCE(p.brand, '미분류')
+    ORDER BY today_count DESC
+  `).all();
+  
+  res.json({
+    kpi: {
+      today_count: todayCount,
+      warning_count: warningCount,
+      avg_quality: avgQuality,
+      avg_rating: avgRating
+    },
+    warning_reviews: warningReviews,
+    product_stats: productStats,
+    brand_stats: brandStats,
+    recent_reviews: todayReviews.slice(0, 30)
+  });
+});
+
 module.exports = router;
