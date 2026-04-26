@@ -293,11 +293,11 @@
 
   <nav class="nav">
     <div class="nav-section">메뉴</div>
-    <div class="nav-item active" data-page="search" onclick="showPage('search', this)">
-      <span class="icon">🔎</span> 노출순위검색
-    </div>
-    <div class="nav-item" data-page="dashboard" onclick="showPage('dashboard', this)">
+    <div class="nav-item active" data-page="dashboard" onclick="showPage('dashboard', this)">
       <span class="icon">📊</span> 대시보드
+    </div>
+    <div class="nav-item" data-page="search" onclick="showPage('search', this)">
+      <span class="icon">🔎</span> 노출순위검색
     </div>
     <div class="nav-item" data-page="trends" onclick="showPage('trends', this)">
       <span class="icon">📈</span> 추이 분석
@@ -332,7 +332,7 @@
 <!-- Main -->
 <main class="main">
   <div class="topbar">
-    <div class="topbar-title" id="topbar-title">노출순위검색</div>
+    <div class="topbar-title" id="topbar-title">대시보드</div>
     <div class="topbar-actions">
       <button class="btn btn-secondary btn-sm" onclick="crawlAll(this)">⟳ 전체 수집</button>
     </div>
@@ -341,7 +341,7 @@
   <div class="content">
 
     <!-- Search Page -->
-    <div class="page active" id="page-search">
+    <div class="page" id="page-search">
       <div class="search-hero">
         <div class="search-hero-title">🎯 경쟁 상품 검색</div>
         <div class="search-hero-sub">네이버 스마트스토어에서 키워드로 상품을 검색하고 노출 순위를 확인하세요</div>
@@ -364,7 +364,7 @@
     </div>
 
     <!-- Dashboard Page -->
-    <div class="page" id="page-dashboard">
+    <div class="page active" id="page-dashboard">
       <!-- 오늘의 KPI -->
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">
         <div class="stat-card">
@@ -726,6 +726,7 @@ let miniCharts = {};
 document.addEventListener('DOMContentLoaded', () => {
   loadProducts();
   loadRecentSearches();
+  loadDashboard(); // initial - 첫 화면이 대시보드
 });
 
 // ── Page Navigation ─────────────────────────────────
