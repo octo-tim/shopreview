@@ -748,6 +748,17 @@ function showPage(pageId, navEl) {
   else if (pageId === 'search') loadRecentSearches();
 }
 
+function goToTrends(productId) {
+  showPage('trends', document.querySelector('[data-page=trends]'));
+  setTimeout(() => {
+    const sel = document.getElementById('trend-product-selector');
+    if (sel) {
+      sel.value = productId;
+      loadTrendDetail(productId);
+    }
+  }, 200);
+}
+
 function showProductDetail(productId) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -775,7 +786,7 @@ function updateSidebarProducts() {
     return;
   }
   el.innerHTML = products.map(p => `
-    <div class="product-nav-item" data-id="${p.id}" onclick="showProductDetail(${p.id})">
+    <div class="product-nav-item" data-id="${p.id}" onclick="goToTrends(${p.id})">
       <div class="dot"></div>
       <div class="pname">${escHtml(p.name)}</div>
       ${p.current_rank ? `<div style="font-size:11px;font-family:var(--mono);color:var(--yellow);">#${p.current_rank}</div>` : ''}
