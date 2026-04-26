@@ -294,7 +294,7 @@
   <nav class="nav">
     <div class="nav-section">메뉴</div>
     <div class="nav-item active" data-page="search" onclick="showPage('search', this)">
-      <span class="icon">🔎</span> 키워드 검색
+      <span class="icon">🔎</span> 노출순위검색
     </div>
     <div class="nav-item" data-page="dashboard" onclick="showPage('dashboard', this)">
       <span class="icon">📊</span> 대시보드
@@ -329,7 +329,7 @@
 <!-- Main -->
 <main class="main">
   <div class="topbar">
-    <div class="topbar-title" id="topbar-title">키워드 검색</div>
+    <div class="topbar-title" id="topbar-title">노출순위검색</div>
     <div class="topbar-actions">
       <button class="btn btn-secondary btn-sm" onclick="crawlAll(this)">⟳ 전체 수집</button>
     </div>
@@ -546,7 +546,7 @@ function showPage(pageId, navEl) {
   document.getElementById('page-' + pageId)?.classList.add('active');
   navEl?.classList.add('active');
 
-  const titles = { search: '키워드 검색', dashboard: '대시보드', trends: '추이 분석', products: '트래킹 상품', 'all-reviews': '전체 리뷰' };
+  const titles = { search: '노출순위검색', dashboard: '대시보드', trends: '추이 분석', products: '트래킹 상품', 'all-reviews': '전체 리뷰' };
   document.getElementById('topbar-title').textContent = titles[pageId] || navEl?.querySelector('.pname')?.textContent || '리뷰 레이더';
 
   if (pageId === 'dashboard') loadDashboard();
@@ -1129,7 +1129,7 @@ async function loadProductsPage() {
   document.getElementById('product-count-label').textContent = `(${products.length}/10)`;
   
   if (!products.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><div class="empty-title">트래킹 상품이 없습니다</div><div class="empty-desc">키워드 검색에서 상품을 찾아 트래킹을 시작하세요</div></div>';
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><div class="empty-title">트래킹 상품이 없습니다</div><div class="empty-desc">노출순위검색에서 상품을 찾아 트래킹을 시작하세요</div></div>';
     return;
   }
 
