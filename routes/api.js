@@ -419,4 +419,162 @@ router.patch('/products/:id/period', (req, res) => {
   }
 });
 
+
+// ─── Brands & Categories Master ──────────────────────
+
+// 브랜드 목록 조회
+router.get('/brands', (req, res) => {
+  const db = getDb();
+  const brands = db.prepare(`
+    SELECT b.*, COUNT(p.id) as product_count
+    FROM brands b
+    LEFT JOIN products p ON p.brand = b.name AND p.active = 1
+    GROUP BY b.id
+    ORDER BY b.is_own DESC, b.name ASC
+  `).all();
+  res.json(brands);
+});
+
+// 브랜드 추가
+router.post('/brands', (req, res) => {
+  const { name, is_own, memo } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: '브랜드명이 필요합니다' });
+  
+  const db = getDb();
+  try {
+    const result = db.prepare('INSERT INTO brands (name, is_own, memo) VALUES (?, ?, ?)')
+      .run(name.trim(), is_own ? 1 : 0, memo || null);
+    res.json(db.prepare('SELECT * FROM brands WHERE id = ?').get(result.lastInsertRowid));
+  } catch (e) {
+    if (e.message.includes('UNIQUE')) {
+      res.status(400).json({ error: '이미 존재하는 브랜드입니다' });
+    } else {
+      res.status(500).json({ error: e.message });
+    }
+  }
+});
+
+// 브랜드 수정
+router.patch('/brands/:id', (req, res) => {
+  const { name, is_own, memo } = req.body;
+  const db = getDb();
+  try {
+    const updates = [];
+    const params = [];
+    if (name !== undefined) { updates.push('name = ?'); params.push(name.trim()); }
+    if (is_own !== undefined) { updates.push('is_own = ?'); params.push(is_own ? 1 : 0); }
+    if (memo !== undefined) { updates.push('memo = ?'); params.push(memo || null); }
+    if (!updates.length) return res.status(400).json({ error: '변경 항목 없음' });
+    params.push(req.params.id);
+    
+    const result = db.prepare(`UPDATE brands SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    if (!result.changes) return res.status(404).json({ error: '브랜드 없음' });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 브랜드 삭제
+router.delete('/brands/:id', (req, res) => {
+  const db = getDb();
+  const brand = db.prepare('SELECT * FROM brands WHERE id = ?').get(req.params.id);
+  if (!brand) return res.status(404).json({ error: '브랜드 없음' });
+  
+  const usingCount = db.prepare('SELECT COUNT(*) as cnt FROM products WHERE brand = ? AND active = 1').get(brand.name).cnt;
+  if (usingCount > 0) {
+    return res.status(400).json({ error: `이 브랜드를 사용 중인 상품이 ${usingCount}개 있습니다` });
+  }
+  
+  db.prepare('DELETE FROM brands WHERE id = ?').run(req.params.id);
+  res.json({ success: true });
+});
+
+// 카테고리 목록 조회
+router.get('/categories', (req, res) => {
+  const db = getDb();
+  const categories = db.prepare(`
+    SELECT c.*, COUNT(p.id) as product_count
+    FROM categories c
+    LEFT JOIN products p ON p.product_category = c.name AND p.active = 1
+    GROUP BY c.id
+    ORDER BY c.name ASC
+  `).all();
+  res.json(categories);
+});
+
+// 카테고리 추가
+router.post('/categories', (req, res) => {
+  const { name, memo } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: '카테고리명이 필요합니다' });
+  
+  const db = getDb();
+  try {
+    const result = db.prepare('INSERT INTO categories (name, memo) VALUES (?, ?)')
+      .run(name.trim(), memo || null);
+    res.json(db.prepare('SELECT * FROM categories WHERE id = ?').get(result.lastInsertRowid));
+  } catch (e) {
+    if (e.message.includes('UNIQUE')) {
+      res.status(400).json({ error: '이미 존재하는 카테고리입니다' });
+    } else {
+      res.status(500).json({ error: e.message });
+    }
+  }
+});
+
+// 카테고리 수정
+router.patch('/categories/:id', (req, res) => {
+  const { name, memo } = req.body;
+  const db = getDb();
+  try {
+    const updates = [];
+    const params = [];
+    if (name !== undefined) { updates.push('name = ?'); params.push(name.trim()); }
+    if (memo !== undefined) { updates.push('memo = ?'); params.push(memo || null); }
+    if (!updates.length) return res.status(400).json({ error: '변경 항목 없음' });
+    params.push(req.params.id);
+    
+    const result = db.prepare(`UPDATE categories SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    if (!result.changes) return res.status(404).json({ error: '카테고리 없음' });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 카테고리 삭제
+router.delete('/categories/:id', (req, res) => {
+  const db = getDb();
+  const cat = db.prepare('SELECT * FROM categories WHERE id = ?').get(req.params.id);
+  if (!cat) return res.status(404).json({ error: '카테고리 없음' });
+  
+  const usingCount = db.prepare('SELECT COUNT(*) as cnt FROM products WHERE product_category = ? AND active = 1').get(cat.name).cnt;
+  if (usingCount > 0) {
+    return res.status(400).json({ error: `이 카테고리를 사용 중인 상품이 ${usingCount}개 있습니다` });
+  }
+  
+  db.prepare('DELETE FROM categories WHERE id = ?').run(req.params.id);
+  res.json({ success: true });
+});
+
+// 상품의 brand/category 업데이트 (기존 상품에도 적용 가능)
+router.patch('/products/:id/classify', (req, res) => {
+  const { brand, product_category } = req.body;
+  const db = getDb();
+  try {
+    const updates = [];
+    const params = [];
+    if (brand !== undefined) { updates.push('brand = ?'); params.push(brand || null); }
+    if (product_category !== undefined) { updates.push('product_category = ?'); params.push(product_category || null); }
+    if (!updates.length) return res.status(400).json({ error: '변경 항목 없음' });
+    params.push(req.params.id);
+    
+    const result = db.prepare(`UPDATE products SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    if (!result.changes) return res.status(404).json({ error: '상품 없음' });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

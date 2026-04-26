@@ -93,6 +93,21 @@ function initSchema() {
       last_searched_at TEXT DEFAULT (datetime('now','localtime')),
       search_count INTEGER DEFAULT 1
     );
+
+    CREATE TABLE IF NOT EXISTS brands (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      is_own INTEGER DEFAULT 0,
+      memo TEXT,
+      created_at TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      memo TEXT,
+      created_at TEXT DEFAULT (datetime('now','localtime'))
+    );
   `);
 
   // 마이그레이션: products 컬럼 추가 (안전하게)
