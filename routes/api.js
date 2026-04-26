@@ -59,7 +59,7 @@ router.get('/products', (req, res) => {
 
 // POST add tracked product (from search result)
 router.post('/products', (req, res) => {
-  const { name, url, tracking_keyword, product_code, mall_name, image_url, category } = req.body;
+  const { name, url, tracking_keyword, product_code, mall_name, image_url, category, brand, product_category } = req.body;
   if (!name || !url) return res.status(400).json({ error: '상품명과 URL이 필요합니다' });
 
   const db = getDb();
@@ -69,9 +69,9 @@ router.post('/products', (req, res) => {
 
   try {
     const result = db.prepare(`
-      INSERT INTO products (name, url, tracking_keyword, product_code, mall_name, image_url, category)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(name, url.trim(), tracking_keyword || null, product_code || null, mall_name || null, image_url || null, category || null);
+      INSERT INTO products (name, url, tracking_keyword, product_code, mall_name, image_url, category, brand, product_category)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(name, url.trim(), tracking_keyword || null, product_code || null, mall_name || null, image_url || null, category || null, brand || null, product_category || null);
     
     const product = db.prepare('SELECT * FROM products WHERE id = ?').get(result.lastInsertRowid);
     res.json(product);
@@ -290,7 +290,7 @@ router.get('/external/products', (req, res) => {
   
   const db = getDb();
   const products = db.prepare(`
-    SELECT id, name, url, tracking_keyword, last_crawled_at, review_period
+    SELECT id, name, url, tracking_keyword, last_crawled_at, review_period, brand, product_category
     FROM products WHERE active = 1
     ORDER BY (last_crawled_at IS NULL) DESC, last_crawled_at ASC
   `).all();

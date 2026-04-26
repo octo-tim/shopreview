@@ -454,6 +454,18 @@
               style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;">
           </div>
           
+          <div style="margin-bottom:14px;">
+            <label style="display:block;font-size:12px;color:var(--text3);margin-bottom:6px;">브랜드 <span style="color:var(--red);">*</span></label>
+            <input id="url-brand-input" type="text" placeholder="예: 꿈비, 슈슈비"
+              style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;">
+          </div>
+          
+          <div style="margin-bottom:14px;">
+            <label style="display:block;font-size:12px;color:var(--text3);margin-bottom:6px;">제품 카테고리 <span style="color:var(--red);">*</span></label>
+            <input id="url-category-input" type="text" placeholder="예: 분유포트, 유아매트"
+              style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;">
+          </div>
+          
           <div style="margin-bottom:18px;">
             <label style="display:block;font-size:12px;color:var(--text3);margin-bottom:6px;">상품명 <span style="font-size:11px;color:var(--text3);">(선택, 빈칸이면 임시명)</span></label>
             <input id="url-name-input" type="text" placeholder="비워두면 자동 채워짐"
@@ -507,8 +519,14 @@
       <div class="form-hint">이 키워드로 검색 시 노출 순위를 추적합니다</div>
     </div>
     <div class="form-group">
-      <label class="form-label">카테고리 (선택)</label>
-      <input class="form-input" id="track-category" placeholder="예: 유아용품">
+      <label class="form-label">브랜드 *</label>
+      <input class="form-input" id="track-brand" placeholder="예: 꿈비, 슈슈비">
+      <div class="form-hint">상품을 브랜드별로 묶어서 분석합니다</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">제품 카테고리 *</label>
+      <input class="form-input" id="track-category" placeholder="예: 분유포트, 유아매트">
+      <div class="form-hint">동일 제품군끼리 비교할 수 있습니다</div>
     </div>
 
     <div class="modal-actions">
@@ -710,6 +728,7 @@ function openTrackModal(idx) {
     </div>
   `;
   document.getElementById('track-keyword').value = currentKeyword;
+  document.getElementById('track-brand').value = '';
   document.getElementById('track-category').value = '';
   document.getElementById('track-modal').classList.add('open');
 }
@@ -722,8 +741,11 @@ function closeTrackModal() {
 async function confirmTrack() {
   if (!pendingTrackItem) return;
   const keyword = document.getElementById('track-keyword').value.trim();
+  const brand = document.getElementById('track-brand').value.trim();
   const category = document.getElementById('track-category').value.trim();
   if (!keyword) { toast('추적 키워드를 입력해주세요', 'error'); return; }
+  if (!brand) { toast('브랜드를 입력해주세요', 'error'); return; }
+  if (!category) { toast('제품 카테고리를 입력해주세요', 'error'); return; }
 
   try {
     await fetchJSON('/products', 'POST', {
@@ -733,12 +755,12 @@ async function confirmTrack() {
       product_code: pendingTrackItem.productCode,
       mall_name: pendingTrackItem.mallName,
       image_url: pendingTrackItem.imageUrl,
-      category
+      brand: brand,
+      product_category: category
     });
     closeTrackModal();
     toast('트래킹을 시작했습니다', 'success');
     await loadProducts();
-    // Re-render search results to show tracked state
     renderSearchResults(searchResults);
   } catch(e) {
     toast(e.message || '트래킹 실패', 'error');
@@ -1047,6 +1069,8 @@ function switchTrendMetric(metric, el) {
 function openUrlModal() {
   document.getElementById('url-input').value = '';
   document.getElementById('url-keyword-input').value = '';
+  document.getElementById('url-brand-input').value = '';
+  document.getElementById('url-category-input').value = '';
   document.getElementById('url-name-input').value = '';
   document.getElementById('url-modal-msg').innerHTML = '';
   document.getElementById('url-modal').style.display = 'flex';
@@ -1066,6 +1090,8 @@ function parseProductCode(url) {
 async function addProductByUrl() {
   const url = document.getElementById('url-input').value.trim();
   const keyword = document.getElementById('url-keyword-input').value.trim();
+  const brand = document.getElementById('url-brand-input').value.trim();
+  const category = document.getElementById('url-category-input').value.trim();
   const customName = document.getElementById('url-name-input').value.trim();
   const msgEl = document.getElementById('url-modal-msg');
   const btn = document.getElementById('url-modal-submit');
@@ -1078,6 +1104,14 @@ async function addProductByUrl() {
   }
   if (!url.includes('naver.com')) {
     msgEl.innerHTML = '<span style="color:var(--red);">네이버 스마트스토어 URL이 아닙니다</span>';
+    return;
+  }
+  if (!brand) {
+    msgEl.innerHTML = '<span style="color:var(--red);">브랜드를 입력하세요</span>';
+    return;
+  }
+  if (!category) {
+    msgEl.innerHTML = '<span style="color:var(--red);">제품 카테고리를 입력하세요</span>';
     return;
   }
   
@@ -1097,7 +1131,9 @@ async function addProductByUrl() {
       url: url,
       product_code: productCode,
       tracking_keyword: keyword || null,
-      mall_name: url.includes('brand.naver.com') ? '브랜드스토어' : '스마트스토어'
+      mall_name: url.includes('brand.naver.com') ? '브랜드스토어' : '스마트스토어',
+      brand: brand,
+      product_category: category
     };
     
     const res = await fetch('/api/products', {
