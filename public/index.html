@@ -451,7 +451,28 @@
           <button class="btn btn-primary btn-sm" onclick="showPage('search', document.querySelector('[data-page=search]'))">+ 상품 찾기</button>
         </div>
       </div>
+      
+      <!-- 필터 + 뷰 토글 -->
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+        <select id="filter-brand" onchange="applyProductFilter()" 
+          style="padding:6px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;">
+          <option value="">전체 브랜드</option>
+        </select>
+        <select id="filter-category" onchange="applyProductFilter()"
+          style="padding:6px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;">
+          <option value="">전체 카테고리</option>
+        </select>
+        <div style="flex:1;"></div>
+        <div style="display:flex;background:var(--bg2);border:1px solid var(--border);border-radius:6px;overflow:hidden;">
+          <button id="view-card-btn" onclick="setProductViewMode('card')" 
+            style="padding:6px 14px;background:var(--accent);color:white;border:none;font-size:12px;cursor:pointer;">📦 카드</button>
+          <button id="view-table-btn" onclick="setProductViewMode('table')"
+            style="padding:6px 14px;background:transparent;color:var(--text2);border:none;font-size:12px;cursor:pointer;">📋 테이블</button>
+        </div>
+      </div>
+      
       <div id="products-list"><div class="loading"><div class="spinner"></div> 로딩 중...</div></div>
+      <div id="products-table" style="display:none;"></div>
       
       <!-- URL로 추가 모달 -->
       <div id="url-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
@@ -1662,39 +1683,189 @@ async function saveClassify() {
   }
 }
 
+let productViewMode = 'card';
+let productFilterBrand = '';
+let productFilterCategory = '';
+let productStatsCache = [];
+
+function setProductViewMode(mode) {
+  productViewMode = mode;
+  document.getElementById('view-card-btn').style.background = mode === 'card' ? 'var(--accent)' : 'transparent';
+  document.getElementById('view-card-btn').style.color = mode === 'card' ? 'white' : 'var(--text2)';
+  document.getElementById('view-table-btn').style.background = mode === 'table' ? 'var(--accent)' : 'transparent';
+  document.getElementById('view-table-btn').style.color = mode === 'table' ? 'white' : 'var(--text2)';
+  
+  document.getElementById('products-list').style.display = mode === 'card' ? '' : 'none';
+  document.getElementById('products-table').style.display = mode === 'table' ? '' : 'none';
+  
+  if (mode === 'table') renderProductsTable();
+  else renderProductsCard();
+}
+
+async function applyProductFilter() {
+  productFilterBrand = document.getElementById('filter-brand').value;
+  productFilterCategory = document.getElementById('filter-category').value;
+  
+  if (productViewMode === 'table') renderProductsTable();
+  else renderProductsCard();
+}
+
+function getFilteredProducts() {
+  return products.filter(p => {
+    if (productFilterBrand && p.brand !== productFilterBrand) return false;
+    if (productFilterCategory && p.product_category !== productFilterCategory) return false;
+    return true;
+  });
+}
+
+async function populateProductFilters() {
+  const brandSet = new Set();
+  const catSet = new Set();
+  products.forEach(p => {
+    if (p.brand) brandSet.add(p.brand);
+    if (p.product_category) catSet.add(p.product_category);
+  });
+  
+  const brandSel = document.getElementById('filter-brand');
+  brandSel.innerHTML = '<option value="">전체 브랜드 (' + products.length + ')</option>' + 
+    [...brandSet].sort().map(b => {
+      const cnt = products.filter(p => p.brand === b).length;
+      return '<option value="' + escHtml(b) + '">' + escHtml(b) + ' (' + cnt + ')</option>';
+    }).join('');
+  brandSel.value = productFilterBrand;
+  
+  const catSel = document.getElementById('filter-category');
+  catSel.innerHTML = '<option value="">전체 카테고리</option>' + 
+    [...catSet].sort().map(cat => {
+      const cnt = products.filter(p => p.product_category === cat).length;
+      return '<option value="' + escHtml(cat) + '">' + escHtml(cat) + ' (' + cnt + ')</option>';
+    }).join('');
+  catSel.value = productFilterCategory;
+}
+
 async function loadProductsPage() {
   await loadProducts();
-  const el = document.getElementById('products-list');
-  document.getElementById('product-count-label').textContent = `(${products.length}/10)`;
   
+  // 상품별 추가 통계 가져오기 (오늘 신규/품질 등)
+  try {
+    const dashData = await fetchJSON('/dashboard');
+    productStatsCache = dashData.product_stats || [];
+  } catch(e) {
+    productStatsCache = [];
+  }
+  
+  document.getElementById('product-count-label').textContent = `(${products.length}/10)`;
+  await populateProductFilters();
+  
+  const el = document.getElementById('products-list');
   if (!products.length) {
     el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><div class="empty-title">트래킹 상품이 없습니다</div><div class="empty-desc">노출순위검색에서 상품을 찾아 트래킹을 시작하세요</div></div>';
+    document.getElementById('products-table').innerHTML = '';
     return;
   }
+  
+  if (productViewMode === 'card') renderProductsCard();
+  else renderProductsTable();
+}
 
-  el.innerHTML = products.map(p => {
+function renderProductsTable() {
+  const el = document.getElementById('products-table');
+  const filtered = getFilteredProducts();
+  
+  if (!filtered.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-title">조건에 맞는 상품 없음</div></div>';
+    return;
+  }
+  
+  // 통계와 결합
+  const rows = filtered.map(p => {
+    const stat = productStatsCache.find(s => s.id === p.id) || {};
+    return { ...p, today_count: stat.today_count || 0, avg_quality: stat.avg_quality, warning_count: stat.warning_count || 0 };
+  });
+  
+  el.innerHTML = `
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:var(--bg3);border-bottom:1px solid var(--border);">
+            <th style="padding:12px;text-align:left;color:var(--text3);font-weight:600;font-size:11px;text-transform:uppercase;">상품</th>
+            <th style="padding:12px;text-align:left;color:var(--text3);font-weight:600;font-size:11px;text-transform:uppercase;">브랜드</th>
+            <th style="padding:12px;text-align:left;color:var(--text3);font-weight:600;font-size:11px;text-transform:uppercase;">카테고리</th>
+            <th style="padding:12px;text-align:right;color:var(--text3);font-weight:600;font-size:11px;text-transform:uppercase;">총 리뷰</th>
+            <th style="padding:12px;text-align:right;color:var(--text3);font-weight:600;font-size:11px;text-transform:uppercase;">평점</th>
+            <th style="padding:12px;text-align:right;color:var(--text3);font-weight:600;font-size:11px;text-transform:uppercase;">오늘</th>
+            <th style="padding:12px;text-align:right;color:var(--text3);font-weight:600;font-size:11px;text-transform:uppercase;">품질</th>
+            <th style="padding:12px;text-align:right;color:var(--text3);font-weight:600;font-size:11px;text-transform:uppercase;">주의</th>
+            <th style="padding:12px;text-align:center;color:var(--text3);font-weight:600;font-size:11px;text-transform:uppercase;">관리</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr style="border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='transparent'">
+              <td style="padding:12px;">
+                <div style="display:flex;align-items:center;gap:10px;">
+                  ${r.image_url ? '<img src="' + escHtml(r.image_url) + '" style="width:36px;height:36px;border-radius:4px;object-fit:cover;flex-shrink:0;" onerror="this.style.display=\'none\'">' : '<div style="width:36px;height:36px;background:var(--bg3);border-radius:4px;flex-shrink:0;"></div>'}
+                  <div style="min-width:0;max-width:300px;">
+                    <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(r.name)}</div>
+                    <div style="font-size:10px;color:var(--text3);">${r.tracking_keyword ? '🔎 ' + escHtml(r.tracking_keyword) : ''}</div>
+                  </div>
+                </div>
+              </td>
+              <td style="padding:12px;">${r.brand ? escHtml(r.brand) : '<span style="color:var(--red);font-size:11px;">미분류</span>'}</td>
+              <td style="padding:12px;">${r.product_category ? escHtml(r.product_category) : '<span style="color:var(--red);font-size:11px;">미분류</span>'}</td>
+              <td style="padding:12px;text-align:right;font-weight:600;">${(r.review_count || 0).toLocaleString()}</td>
+              <td style="padding:12px;text-align:right;color:var(--yellow);">${r.avg_rating ? '★ ' + r.avg_rating : '—'}</td>
+              <td style="padding:12px;text-align:right;font-weight:600;color:${r.today_count > 0 ? 'var(--accent)' : 'var(--text3)'};">${r.today_count > 0 ? '+' + r.today_count : '0'}</td>
+              <td style="padding:12px;text-align:right;color:${r.avg_quality !== null && r.avg_quality !== undefined ? getQualityColor(r.avg_quality) : 'var(--text3)'};font-weight:600;">
+                ${r.avg_quality !== null && r.avg_quality !== undefined ? Math.round(r.avg_quality) : '—'}
+              </td>
+              <td style="padding:12px;text-align:right;">
+                ${r.warning_count > 0 ? '<span style="color:var(--red);font-weight:600;">⚠ ' + r.warning_count + '</span>' : '<span style="color:var(--text3);">0</span>'}
+              </td>
+              <td style="padding:12px;text-align:center;">
+                <div style="display:flex;gap:4px;justify-content:center;">
+                  <button class="btn btn-secondary btn-sm" onclick="classifyProduct(${r.id})" style="padding:4px 8px;font-size:11px;">분류</button>
+                  <button class="btn btn-secondary btn-sm" onclick="showProductDetail(${r.id})" style="padding:4px 8px;font-size:11px;">상세</button>
+                </div>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderProductsCard() {
+  const el = document.getElementById('products-list');
+  const filtered = getFilteredProducts();
+  
+  if (!filtered.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-title">조건에 맞는 상품 없음</div></div>';
+    return;
+  }
+  
+  el.innerHTML = filtered.map(p => {
     const needsClassify = !p.brand || !p.product_category;
     const brandBadge = p.brand 
-      ? `<span style="display:inline-block;font-size:11px;background:rgba(79,142,247,0.15);color:var(--accent);padding:2px 8px;border-radius:4px;margin-right:4px;">🏷️ ${escHtml(p.brand)}</span>`
+      ? '<span style="display:inline-block;font-size:11px;background:rgba(79,142,247,0.15);color:var(--accent);padding:2px 8px;border-radius:4px;margin-right:4px;">🏷️ ' + escHtml(p.brand) + '</span>'
       : '';
     const categoryBadge = p.product_category
-      ? `<span style="display:inline-block;font-size:11px;background:rgba(102,217,150,0.15);color:var(--green);padding:2px 8px;border-radius:4px;margin-right:4px;">📁 ${escHtml(p.product_category)}</span>`
+      ? '<span style="display:inline-block;font-size:11px;background:rgba(102,217,150,0.15);color:var(--green);padding:2px 8px;border-radius:4px;margin-right:4px;">📁 ' + escHtml(p.product_category) + '</span>'
       : '';
     const unclassifiedBadge = needsClassify
-      ? `<span style="display:inline-block;font-size:11px;background:rgba(229,87,73,0.15);color:var(--red);padding:2px 8px;border-radius:4px;margin-right:4px;">⚠ 분류 필요</span>`
+      ? '<span style="display:inline-block;font-size:11px;background:rgba(229,87,73,0.15);color:var(--red);padding:2px 8px;border-radius:4px;margin-right:4px;">⚠ 분류 필요</span>'
       : '';
     
     return `
     <div class="product-card">
-      ${p.image_url ? `<div class="product-card-thumb"><img src="${escHtml(p.image_url)}" onerror="this.style.display='none'"></div>` : '<div style="width:60px;height:60px;"></div>'}
+      ${p.image_url ? '<div class="product-card-thumb"><img src="' + escHtml(p.image_url) + '" onerror="this.style.display=\'none\'"></div>' : '<div style="width:60px;height:60px;"></div>'}
       <div class="product-card-info">
         <div class="product-card-name">${escHtml(p.name)}</div>
-        <div style="margin-top:4px;">
-          ${brandBadge}${categoryBadge}${unclassifiedBadge}
-        </div>
+        <div style="margin-top:4px;">${brandBadge}${categoryBadge}${unclassifiedBadge}</div>
         <div class="product-card-meta" style="margin-top:4px;">
-          ${p.tracking_keyword ? `<span class="product-card-keyword">🔎 ${escHtml(p.tracking_keyword)}</span>` : '<span style="color:var(--red);">키워드 미설정</span>'}
-          ${p.mall_name ? `· ${escHtml(p.mall_name)}` : ''}
+          ${p.tracking_keyword ? '<span class="product-card-keyword">🔎 ' + escHtml(p.tracking_keyword) + '</span>' : '<span style="color:var(--red);">키워드 미설정</span>'}
+          ${p.mall_name ? '· ' + escHtml(p.mall_name) : ''}
           · 리뷰 ${p.review_count || 0}
           · 평점 ${p.avg_rating || '—'}
           · ${p.last_snapshot_at ? '최근 스냅샷: '+p.last_snapshot_at.slice(0,16) : '미수집'}
@@ -1718,6 +1889,7 @@ async function loadProductsPage() {
   `;
   }).join('');
 }
+
 
 // ── Product Detail ───────────────────────────────────
 async function loadProductDetail(productId) {
