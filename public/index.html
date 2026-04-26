@@ -426,9 +426,48 @@
     <div class="page" id="page-products">
       <div class="section-header">
         <div class="section-title">트래킹 상품 <span style="font-size:12px;color:var(--text3);font-family:var(--mono);" id="product-count-label"></span></div>
-        <button class="btn btn-primary btn-sm" onclick="showPage('search', document.querySelector('[data-page=search]'))">+ 상품 찾기</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-secondary btn-sm" onclick="openUrlModal()">+ URL로 추가</button>
+          <button class="btn btn-primary btn-sm" onclick="showPage('search', document.querySelector('[data-page=search]'))">+ 상품 찾기</button>
+        </div>
       </div>
       <div id="products-list"><div class="loading"><div class="spinner"></div> 로딩 중...</div></div>
+      
+      <!-- URL로 추가 모달 -->
+      <div id="url-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px;width:520px;max-width:90vw;">
+          <div style="font-size:16px;font-weight:700;margin-bottom:8px;">URL로 상품 추가</div>
+          <div style="font-size:13px;color:var(--text3);margin-bottom:18px;line-height:1.5;">
+            네이버 스마트스토어 / 브랜드 스토어 상품 URL을 붙여넣으세요.<br>
+            상품명/이미지는 첫 수집 시 자동으로 채워집니다.
+          </div>
+          
+          <div style="margin-bottom:14px;">
+            <label style="display:block;font-size:12px;color:var(--text3);margin-bottom:6px;">상품 URL <span style="color:var(--red);">*</span></label>
+            <input id="url-input" type="text" placeholder="https://smartstore.naver.com/main/products/12052556394"
+              style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;font-family:var(--mono);">
+          </div>
+          
+          <div style="margin-bottom:14px;">
+            <label style="display:block;font-size:12px;color:var(--text3);margin-bottom:6px;">트래킹 키워드 <span style="font-size:11px;color:var(--text3);">(선택, 순위 추적용)</span></label>
+            <input id="url-keyword-input" type="text" placeholder="예: 아기내복"
+              style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;">
+          </div>
+          
+          <div style="margin-bottom:18px;">
+            <label style="display:block;font-size:12px;color:var(--text3);margin-bottom:6px;">상품명 <span style="font-size:11px;color:var(--text3);">(선택, 빈칸이면 임시명)</span></label>
+            <input id="url-name-input" type="text" placeholder="비워두면 자동 채워짐"
+              style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;">
+          </div>
+          
+          <div id="url-modal-msg" style="font-size:13px;margin-bottom:14px;min-height:18px;"></div>
+          
+          <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button class="btn btn-secondary btn-sm" onclick="closeUrlModal()">취소</button>
+            <button id="url-modal-submit" class="btn btn-primary btn-sm" onclick="addProductByUrl()">추가</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- All Reviews Page -->
@@ -1005,6 +1044,85 @@ function switchTrendMetric(metric, el) {
 }
 
 // ── Products Page ────────────────────────────────────
+function openUrlModal() {
+  document.getElementById('url-input').value = '';
+  document.getElementById('url-keyword-input').value = '';
+  document.getElementById('url-name-input').value = '';
+  document.getElementById('url-modal-msg').innerHTML = '';
+  document.getElementById('url-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('url-input').focus(), 100);
+}
+
+function closeUrlModal() {
+  document.getElementById('url-modal').style.display = 'none';
+}
+
+function parseProductCode(url) {
+  // 지원: smartstore.naver.com/.../products/12345, m.brand.naver.com/.../products/12345 등
+  const m = url.match(/\/products\/(\d+)/);
+  return m ? m[1] : null;
+}
+
+async function addProductByUrl() {
+  const url = document.getElementById('url-input').value.trim();
+  const keyword = document.getElementById('url-keyword-input').value.trim();
+  const customName = document.getElementById('url-name-input').value.trim();
+  const msgEl = document.getElementById('url-modal-msg');
+  const btn = document.getElementById('url-modal-submit');
+  
+  msgEl.innerHTML = '';
+  
+  if (!url) {
+    msgEl.innerHTML = '<span style="color:var(--red);">URL을 입력하세요</span>';
+    return;
+  }
+  if (!url.includes('naver.com')) {
+    msgEl.innerHTML = '<span style="color:var(--red);">네이버 스마트스토어 URL이 아닙니다</span>';
+    return;
+  }
+  
+  const productCode = parseProductCode(url);
+  if (!productCode) {
+    msgEl.innerHTML = '<span style="color:var(--red);">URL에서 상품번호를 찾을 수 없습니다</span>';
+    return;
+  }
+  
+  btn.disabled = true;
+  btn.textContent = '추가 중...';
+  msgEl.innerHTML = '<span style="color:var(--text3);">상품 등록 중...</span>';
+  
+  try {
+    const body = {
+      name: customName || '상품명 자동수집 대기 (' + productCode + ')',
+      url: url,
+      product_code: productCode,
+      tracking_keyword: keyword || null,
+      mall_name: url.includes('brand.naver.com') ? '브랜드스토어' : '스마트스토어'
+    };
+    
+    const res = await fetch('/api/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '등록 실패');
+    
+    msgEl.innerHTML = '<span style="color:var(--green);">✓ 등록 완료! 다음 자동 수집 때 상품명/이미지가 채워집니다</span>';
+    setTimeout(() => {
+      closeUrlModal();
+      loadProductsPage();
+    }, 1500);
+    
+  } catch (e) {
+    msgEl.innerHTML = '<span style="color:var(--red);">' + e.message + '</span>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '추가';
+  }
+}
+
 async function loadProductsPage() {
   await loadProducts();
   const el = document.getElementById('products-list');
