@@ -325,7 +325,7 @@
 
   <div class="crawl-status">
     <span class="crawl-dot"></span>
-    <span id="crawl-status-text">30분마다 자동 수집</span>
+    <span id="crawl-status-text">매일 09:00 자동 수집</span>
   </div>
 </aside>
 
@@ -334,7 +334,7 @@
   <div class="topbar">
     <div class="topbar-title" id="topbar-title">대시보드</div>
     <div class="topbar-actions">
-      <button class="btn btn-secondary btn-sm" onclick="crawlAll(this)">⟳ 전체 수집</button>
+      
     </div>
   </div>
 
@@ -1177,7 +1177,6 @@ async function loadTrendDetail(productId) {
           <div class="empty-icon">📊</div>
           <div class="empty-title">아직 수집된 추이 데이터가 없습니다</div>
           <div class="empty-desc">첫 스냅샷이 수집되면 여기에 그래프가 표시됩니다</div>
-          <button class="btn btn-primary btn-sm" style="margin-top:16px;" onclick="crawlSingle(${productId}, this)">지금 수집하기</button>
         </div>
       `;
       return;
@@ -1894,7 +1893,6 @@ function renderProductsCard() {
       <div class="product-card-actions">
         <button class="btn ${needsClassify ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="classifyProduct(${p.id})">${needsClassify ? '분류 설정' : '분류 변경'}</button>
         <button class="btn btn-secondary btn-sm" onclick="showProductDetail(${p.id})">상세</button>
-        <button class="btn btn-secondary btn-sm" onclick="crawlSingle(${p.id}, this)">⟳ 수집</button>
         <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.id})">삭제</button>
       </div>
     </div>
@@ -1935,7 +1933,6 @@ async function loadProductDetail(productId) {
         </div>
       </div>
       <div style="display:flex;gap:8px;">
-        <button class="btn btn-secondary btn-sm" onclick="crawlSingle(${productId}, this)">⟳ 지금 수집</button>
         <a href="${product?.url}" target="_blank" class="btn btn-secondary btn-sm">🔗 상품 보기</a>
       </div>
     </div>
