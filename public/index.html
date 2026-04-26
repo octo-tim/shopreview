@@ -308,6 +308,9 @@
     <div class="nav-item" data-page="all-reviews" onclick="showPage('all-reviews', this)">
       <span class="icon">💬</span> 전체 리뷰
     </div>
+    <div class="nav-item" data-page="masters" onclick="showPage('masters', this)">
+      <span class="icon">🏷️</span> 브랜드/카테고리
+    </div>
   </nav>
 
   <div class="products-nav">
@@ -456,14 +459,22 @@
           
           <div style="margin-bottom:14px;">
             <label style="display:block;font-size:12px;color:var(--text3);margin-bottom:6px;">브랜드 <span style="color:var(--red);">*</span></label>
-            <input id="url-brand-input" type="text" placeholder="예: 꿈비, 슈슈비"
+            <select id="url-brand-input"
               style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;">
+              <option value="">- 브랜드 선택 -</option>
+            </select>
           </div>
           
           <div style="margin-bottom:14px;">
             <label style="display:block;font-size:12px;color:var(--text3);margin-bottom:6px;">제품 카테고리 <span style="color:var(--red);">*</span></label>
-            <input id="url-category-input" type="text" placeholder="예: 분유포트, 유아매트"
+            <select id="url-category-input"
               style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;">
+              <option value="">- 카테고리 선택 -</option>
+            </select>
+          </div>
+          
+          <div style="margin-bottom:14px;font-size:11px;color:var(--text3);">
+            목록에 없으면 <a href="#" style="color:var(--accent);" onclick="event.preventDefault();closeUrlModal();showPage('masters', document.querySelector('[data-page=masters]'));">브랜드/카테고리 페이지</a>에서 먼저 추가하세요
           </div>
           
           <div style="margin-bottom:18px;">
@@ -502,8 +513,128 @@
       <div id="product-detail-content"></div>
     </div>
 
+    <!-- Masters Page -->
+    <div class="page" id="page-masters">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+            <div style="font-size:15px;font-weight:700;">🏷️ 브랜드</div>
+            <button class="btn btn-primary btn-sm" onclick="openBrandModal()">+ 추가</button>
+          </div>
+          <div id="brands-list"></div>
+        </div>
+        
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+            <div style="font-size:15px;font-weight:700;">📁 제품 카테고리</div>
+            <button class="btn btn-primary btn-sm" onclick="openCategoryModal()">+ 추가</button>
+          </div>
+          <div id="categories-list"></div>
+        </div>
+        
+      </div>
+    </div>
+
   </div>
 </main>
+
+<!-- 브랜드 모달 -->
+<div id="brand-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;width:420px;max-width:90vw;">
+    <div style="font-size:16px;font-weight:700;margin-bottom:16px;" id="brand-modal-title">브랜드 추가</div>
+    <input type="hidden" id="brand-edit-id">
+    
+    <div style="margin-bottom:12px;">
+      <label style="display:block;font-size:12px;color:var(--text3);margin-bottom:6px;">브랜드명 *</label>
+      <input id="brand-name-input" type="text" placeholder="예: 꿈비"
+        style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;">
+    </div>
+    
+    <div style="margin-bottom:12px;">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+        <input id="brand-is-own-input" type="checkbox" style="width:16px;height:16px;">
+        자사 브랜드
+      </label>
+    </div>
+    
+    <div style="margin-bottom:16px;">
+      <label style="display:block;font-size:12px;color:var(--text3);margin-bottom:6px;">메모 (선택)</label>
+      <input id="brand-memo-input" type="text"
+        style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;">
+    </div>
+    
+    <div id="brand-modal-msg" style="font-size:12px;margin-bottom:12px;min-height:16px;"></div>
+    
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-secondary btn-sm" onclick="closeBrandModal()">취소</button>
+      <button class="btn btn-primary btn-sm" onclick="saveBrand()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 카테고리 모달 -->
+<div id="category-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;width:420px;max-width:90vw;">
+    <div style="font-size:16px;font-weight:700;margin-bottom:16px;" id="category-modal-title">카테고리 추가</div>
+    <input type="hidden" id="category-edit-id">
+    
+    <div style="margin-bottom:12px;">
+      <label style="display:block;font-size:12px;color:var(--text3);margin-bottom:6px;">카테고리명 *</label>
+      <input id="category-name-input" type="text" placeholder="예: 분유포트"
+        style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;">
+    </div>
+    
+    <div style="margin-bottom:16px;">
+      <label style="display:block;font-size:12px;color:var(--text3);margin-bottom:6px;">메모 (선택)</label>
+      <input id="category-memo-input" type="text"
+        style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;">
+    </div>
+    
+    <div id="category-modal-msg" style="font-size:12px;margin-bottom:12px;min-height:16px;"></div>
+    
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-secondary btn-sm" onclick="closeCategoryModal()">취소</button>
+      <button class="btn btn-primary btn-sm" onclick="saveCategory()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 분류 변경 모달 -->
+<div id="classify-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1100;align-items:center;justify-content:center;">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;width:420px;max-width:90vw;">
+    <div style="font-size:16px;font-weight:700;margin-bottom:8px;">상품 분류 설정</div>
+    <div id="classify-product-name" style="font-size:13px;color:var(--text3);margin-bottom:16px;"></div>
+    <input type="hidden" id="classify-product-id">
+    
+    <div style="margin-bottom:14px;">
+      <label style="display:block;font-size:12px;color:var(--text3);margin-bottom:6px;">브랜드</label>
+      <select id="classify-brand-select"
+        style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;">
+        <option value="">- 브랜드 선택 -</option>
+      </select>
+    </div>
+    
+    <div style="margin-bottom:16px;">
+      <label style="display:block;font-size:12px;color:var(--text3);margin-bottom:6px;">제품 카테고리</label>
+      <select id="classify-category-select"
+        style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;">
+        <option value="">- 카테고리 선택 -</option>
+      </select>
+    </div>
+    
+    <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">
+      목록에 없으면 <a href="#" style="color:var(--accent);" onclick="event.preventDefault();closeClassifyModal();showPage('masters', document.querySelector('[data-page=masters]'));">브랜드/카테고리 페이지</a>에서 추가하세요
+    </div>
+    
+    <div id="classify-modal-msg" style="font-size:12px;margin-bottom:12px;min-height:16px;"></div>
+    
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-secondary btn-sm" onclick="closeClassifyModal()">취소</button>
+      <button class="btn btn-primary btn-sm" onclick="saveClassify()">저장</button>
+    </div>
+  </div>
+</div>
 
 <!-- Track Modal -->
 <div class="modal-overlay" id="track-modal">
@@ -520,13 +651,16 @@
     </div>
     <div class="form-group">
       <label class="form-label">브랜드 *</label>
-      <input class="form-input" id="track-brand" placeholder="예: 꿈비, 슈슈비">
-      <div class="form-hint">상품을 브랜드별로 묶어서 분석합니다</div>
+      <select class="form-input" id="track-brand">
+        <option value="">- 브랜드 선택 -</option>
+      </select>
+      <div class="form-hint">목록에 없으면 <a href="#" onclick="event.preventDefault();closeTrackModal();showPage('masters', document.querySelector('[data-page=masters]'));">브랜드/카테고리 페이지</a>에서 먼저 추가하세요</div>
     </div>
     <div class="form-group">
       <label class="form-label">제품 카테고리 *</label>
-      <input class="form-input" id="track-category" placeholder="예: 분유포트, 유아매트">
-      <div class="form-hint">동일 제품군끼리 비교할 수 있습니다</div>
+      <select class="form-input" id="track-category">
+        <option value="">- 카테고리 선택 -</option>
+      </select>
     </div>
 
     <div class="modal-actions">
@@ -564,13 +698,14 @@ function showPage(pageId, navEl) {
   document.getElementById('page-' + pageId)?.classList.add('active');
   navEl?.classList.add('active');
 
-  const titles = { search: '노출순위검색', dashboard: '대시보드', trends: '추이 분석', products: '트래킹 상품', 'all-reviews': '전체 리뷰' };
+  const titles = { search: '노출순위검색', dashboard: '대시보드', trends: '추이 분석', products: '트래킹 상품', 'all-reviews': '전체 리뷰', masters: '브랜드 / 카테고리 관리' };
   document.getElementById('topbar-title').textContent = titles[pageId] || navEl?.querySelector('.pname')?.textContent || '리뷰 레이더';
 
   if (pageId === 'dashboard') loadDashboard();
   else if (pageId === 'trends') loadTrendsPage();
   else if (pageId === 'products') loadProductsPage();
   else if (pageId === 'all-reviews') loadAllReviews();
+  else if (pageId === 'masters') loadMastersPage();
   else if (pageId === 'search') loadRecentSearches();
 }
 
@@ -728,8 +863,7 @@ function openTrackModal(idx) {
     </div>
   `;
   document.getElementById('track-keyword').value = currentKeyword;
-  document.getElementById('track-brand').value = '';
-  document.getElementById('track-category').value = '';
+  populateBrandCategoryDropdowns('track-brand', 'track-category', '', '');
   document.getElementById('track-modal').classList.add('open');
 }
 
@@ -1069,8 +1203,7 @@ function switchTrendMetric(metric, el) {
 function openUrlModal() {
   document.getElementById('url-input').value = '';
   document.getElementById('url-keyword-input').value = '';
-  document.getElementById('url-brand-input').value = '';
-  document.getElementById('url-category-input').value = '';
+  populateBrandCategoryDropdowns('url-brand-input', 'url-category-input', '', '');
   document.getElementById('url-name-input').value = '';
   document.getElementById('url-modal-msg').innerHTML = '';
   document.getElementById('url-modal').style.display = 'flex';
@@ -1159,6 +1292,236 @@ async function addProductByUrl() {
   }
 }
 
+// 드롭다운 채우기 헬퍼
+async function populateBrandCategoryDropdowns(brandSelectId, categorySelectId, selectedBrand, selectedCategory) {
+  try {
+    const [brands, categories] = await Promise.all([
+      fetchJSON('/brands'),
+      fetchJSON('/categories')
+    ]);
+    
+    const brandSel = document.getElementById(brandSelectId);
+    brandSel.innerHTML = '<option value="">- 브랜드 선택 -</option>' + 
+      brands.map(b => `<option value="${escHtml(b.name)}" ${selectedBrand === b.name ? 'selected' : ''}>${escHtml(b.name)}${b.is_own ? ' (자사)' : ''}</option>`).join('');
+    
+    const catSel = document.getElementById(categorySelectId);
+    catSel.innerHTML = '<option value="">- 카테고리 선택 -</option>' + 
+      categories.map(c => `<option value="${escHtml(c.name)}" ${selectedCategory === c.name ? 'selected' : ''}>${escHtml(c.name)}</option>`).join('');
+  } catch(e) {
+    console.error('드롭다운 로드 실패', e);
+  }
+}
+
+// ── Masters (Brands & Categories) ────────────────────
+async function loadMastersPage() {
+  await Promise.all([loadBrandsList(), loadCategoriesList()]);
+}
+
+async function loadBrandsList() {
+  const el = document.getElementById('brands-list');
+  try {
+    const brands = await fetchJSON('/brands');
+    if (!brands.length) {
+      el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px;">등록된 브랜드 없음</div>';
+      return;
+    }
+    el.innerHTML = brands.map(b => `
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;">
+            ${escHtml(b.name)}
+            ${b.is_own ? '<span style="font-size:10px;background:var(--accent);color:white;padding:1px 6px;border-radius:3px;">자사</span>' : ''}
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">${b.product_count}개 상품 · ${b.memo ? escHtml(b.memo) : ''}</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="editBrand(${b.id})">수정</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteBrand(${b.id})">삭제</button>
+      </div>
+    `).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--red);padding:20px;">로드 실패</div>';
+  }
+}
+
+async function loadCategoriesList() {
+  const el = document.getElementById('categories-list');
+  try {
+    const cats = await fetchJSON('/categories');
+    if (!cats.length) {
+      el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px;">등록된 카테고리 없음</div>';
+      return;
+    }
+    el.innerHTML = cats.map(cat => `
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:600;">${escHtml(cat.name)}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">${cat.product_count}개 상품 · ${cat.memo ? escHtml(cat.memo) : ''}</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="editCategory(${cat.id})">수정</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteCategory(${cat.id})">삭제</button>
+      </div>
+    `).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--red);padding:20px;">로드 실패</div>';
+  }
+}
+
+function openBrandModal() {
+  document.getElementById('brand-modal-title').textContent = '브랜드 추가';
+  document.getElementById('brand-edit-id').value = '';
+  document.getElementById('brand-name-input').value = '';
+  document.getElementById('brand-is-own-input').checked = false;
+  document.getElementById('brand-memo-input').value = '';
+  document.getElementById('brand-modal-msg').innerHTML = '';
+  document.getElementById('brand-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('brand-name-input').focus(), 100);
+}
+
+function closeBrandModal() {
+  document.getElementById('brand-modal').style.display = 'none';
+}
+
+async function editBrand(id) {
+  const brands = await fetchJSON('/brands');
+  const b = brands.find(x => x.id === id);
+  if (!b) return;
+  document.getElementById('brand-modal-title').textContent = '브랜드 수정';
+  document.getElementById('brand-edit-id').value = id;
+  document.getElementById('brand-name-input').value = b.name;
+  document.getElementById('brand-is-own-input').checked = !!b.is_own;
+  document.getElementById('brand-memo-input').value = b.memo || '';
+  document.getElementById('brand-modal-msg').innerHTML = '';
+  document.getElementById('brand-modal').style.display = 'flex';
+}
+
+async function saveBrand() {
+  const id = document.getElementById('brand-edit-id').value;
+  const name = document.getElementById('brand-name-input').value.trim();
+  const is_own = document.getElementById('brand-is-own-input').checked;
+  const memo = document.getElementById('brand-memo-input').value.trim();
+  const msgEl = document.getElementById('brand-modal-msg');
+  
+  if (!name) { msgEl.innerHTML = '<span style="color:var(--red);">브랜드명을 입력하세요</span>'; return; }
+  
+  try {
+    if (id) {
+      await fetchJSON('/brands/' + id, 'PATCH', { name, is_own, memo });
+    } else {
+      await fetchJSON('/brands', 'POST', { name, is_own, memo });
+    }
+    closeBrandModal();
+    loadBrandsList();
+    toast(id ? '수정 완료' : '추가 완료', 'success');
+  } catch(e) {
+    msgEl.innerHTML = '<span style="color:var(--red);">' + e.message + '</span>';
+  }
+}
+
+async function deleteBrand(id) {
+  if (!confirm('이 브랜드를 삭제하시겠습니까?')) return;
+  try {
+    await fetchJSON('/brands/' + id, 'DELETE');
+    loadBrandsList();
+    toast('삭제 완료', 'success');
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+
+function openCategoryModal() {
+  document.getElementById('category-modal-title').textContent = '카테고리 추가';
+  document.getElementById('category-edit-id').value = '';
+  document.getElementById('category-name-input').value = '';
+  document.getElementById('category-memo-input').value = '';
+  document.getElementById('category-modal-msg').innerHTML = '';
+  document.getElementById('category-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('category-name-input').focus(), 100);
+}
+
+function closeCategoryModal() {
+  document.getElementById('category-modal').style.display = 'none';
+}
+
+async function editCategory(id) {
+  const cats = await fetchJSON('/categories');
+  const cat = cats.find(x => x.id === id);
+  if (!cat) return;
+  document.getElementById('category-modal-title').textContent = '카테고리 수정';
+  document.getElementById('category-edit-id').value = id;
+  document.getElementById('category-name-input').value = cat.name;
+  document.getElementById('category-memo-input').value = cat.memo || '';
+  document.getElementById('category-modal-msg').innerHTML = '';
+  document.getElementById('category-modal').style.display = 'flex';
+}
+
+async function saveCategory() {
+  const id = document.getElementById('category-edit-id').value;
+  const name = document.getElementById('category-name-input').value.trim();
+  const memo = document.getElementById('category-memo-input').value.trim();
+  const msgEl = document.getElementById('category-modal-msg');
+  
+  if (!name) { msgEl.innerHTML = '<span style="color:var(--red);">카테고리명을 입력하세요</span>'; return; }
+  
+  try {
+    if (id) {
+      await fetchJSON('/categories/' + id, 'PATCH', { name, memo });
+    } else {
+      await fetchJSON('/categories', 'POST', { name, memo });
+    }
+    closeCategoryModal();
+    loadCategoriesList();
+    toast(id ? '수정 완료' : '추가 완료', 'success');
+  } catch(e) {
+    msgEl.innerHTML = '<span style="color:var(--red);">' + e.message + '</span>';
+  }
+}
+
+async function deleteCategory(id) {
+  if (!confirm('이 카테고리를 삭제하시겠습니까?')) return;
+  try {
+    await fetchJSON('/categories/' + id, 'DELETE');
+    loadCategoriesList();
+    toast('삭제 완료', 'success');
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+
+// 상품 분류 변경
+async function classifyProduct(productId) {
+  const product = products.find(p => p.id === productId);
+  if (!product) return;
+  
+  document.getElementById('classify-product-id').value = productId;
+  document.getElementById('classify-product-name').textContent = product.name.substring(0, 60);
+  document.getElementById('classify-modal-msg').innerHTML = '';
+  
+  await populateBrandCategoryDropdowns('classify-brand-select', 'classify-category-select', product.brand || '', product.product_category || '');
+  
+  document.getElementById('classify-modal').style.display = 'flex';
+}
+
+function closeClassifyModal() {
+  document.getElementById('classify-modal').style.display = 'none';
+}
+
+async function saveClassify() {
+  const id = document.getElementById('classify-product-id').value;
+  const brand = document.getElementById('classify-brand-select').value;
+  const product_category = document.getElementById('classify-category-select').value;
+  const msgEl = document.getElementById('classify-modal-msg');
+  
+  try {
+    await fetchJSON('/products/' + id + '/classify', 'PATCH', { brand, product_category });
+    closeClassifyModal();
+    await loadProducts();
+    loadProductsPage();
+    toast('분류가 저장되었습니다', 'success');
+  } catch(e) {
+    msgEl.innerHTML = '<span style="color:var(--red);">' + e.message + '</span>';
+  }
+}
+
 async function loadProductsPage() {
   await loadProducts();
   const el = document.getElementById('products-list');
@@ -1169,12 +1532,27 @@ async function loadProductsPage() {
     return;
   }
 
-  el.innerHTML = products.map(p => `
+  el.innerHTML = products.map(p => {
+    const needsClassify = !p.brand || !p.product_category;
+    const brandBadge = p.brand 
+      ? `<span style="display:inline-block;font-size:11px;background:rgba(79,142,247,0.15);color:var(--accent);padding:2px 8px;border-radius:4px;margin-right:4px;">🏷️ ${escHtml(p.brand)}</span>`
+      : '';
+    const categoryBadge = p.product_category
+      ? `<span style="display:inline-block;font-size:11px;background:rgba(102,217,150,0.15);color:var(--green);padding:2px 8px;border-radius:4px;margin-right:4px;">📁 ${escHtml(p.product_category)}</span>`
+      : '';
+    const unclassifiedBadge = needsClassify
+      ? `<span style="display:inline-block;font-size:11px;background:rgba(229,87,73,0.15);color:var(--red);padding:2px 8px;border-radius:4px;margin-right:4px;">⚠ 분류 필요</span>`
+      : '';
+    
+    return `
     <div class="product-card">
       ${p.image_url ? `<div class="product-card-thumb"><img src="${escHtml(p.image_url)}" onerror="this.style.display='none'"></div>` : '<div style="width:60px;height:60px;"></div>'}
       <div class="product-card-info">
         <div class="product-card-name">${escHtml(p.name)}</div>
-        <div class="product-card-meta">
+        <div style="margin-top:4px;">
+          ${brandBadge}${categoryBadge}${unclassifiedBadge}
+        </div>
+        <div class="product-card-meta" style="margin-top:4px;">
           ${p.tracking_keyword ? `<span class="product-card-keyword">🔎 ${escHtml(p.tracking_keyword)}</span>` : '<span style="color:var(--red);">키워드 미설정</span>'}
           ${p.mall_name ? `· ${escHtml(p.mall_name)}` : ''}
           · 리뷰 ${p.review_count || 0}
@@ -1191,12 +1569,14 @@ async function loadProductsPage() {
         <option value="all" ${p.review_period === 'all' ? 'selected' : ''}>📅 전체</option>
       </select>
       <div class="product-card-actions">
+        <button class="btn ${needsClassify ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="classifyProduct(${p.id})">${needsClassify ? '분류 설정' : '분류 변경'}</button>
         <button class="btn btn-secondary btn-sm" onclick="showProductDetail(${p.id})">상세</button>
         <button class="btn btn-secondary btn-sm" onclick="crawlSingle(${p.id}, this)">⟳ 수집</button>
         <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.id})">삭제</button>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 // ── Product Detail ───────────────────────────────────
