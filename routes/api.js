@@ -316,8 +316,8 @@ router.post('/external/reviews', (req, res) => {
   
   const insertReview = db.prepare(`
     INSERT OR IGNORE INTO reviews 
-    (product_id, review_id, author, rating, content, option_info, helpful_count, has_photo, review_date)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (product_id, review_id, author, rating, content, option_info, helpful_count, has_photo, review_date, quality_score, quality_flags)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   
   let newCount = 0;
@@ -332,7 +332,9 @@ router.post('/external/reviews', (req, res) => {
         r.option || '',
         r.helpful || 0,
         r.hasPhoto ? 1 : 0,
-        r.date || ''
+        r.date || '',
+        r.quality_score !== undefined ? r.quality_score : null,
+        r.quality_flags || null
       );
       if (result.changes > 0) newCount++;
     }
