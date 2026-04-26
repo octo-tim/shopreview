@@ -95,16 +95,42 @@ function initSchema() {
     );
   `);
 
-  // 마이그레이션: products.review_period 컬럼 추가 (안전하게)
+  // 마이그레이션: products 컬럼 추가 (안전하게)
   try {
     const cols = db.prepare("PRAGMA table_info(products)").all();
-    const hasPeriod = cols.some(c => c.name === 'review_period');
-    if (!hasPeriod) {
+    const colNames = cols.map(c => c.name);
+    
+    if (!colNames.includes('review_period')) {
       db.exec("ALTER TABLE products ADD COLUMN review_period TEXT DEFAULT '1m'");
       console.log('✅ products.review_period 컬럼 추가됨');
     }
+    if (!colNames.includes('brand')) {
+      db.exec("ALTER TABLE products ADD COLUMN brand TEXT");
+      console.log('✅ products.brand 컬럼 추가됨');
+    }
+    if (!colNames.includes('product_category')) {
+      db.exec("ALTER TABLE products ADD COLUMN product_category TEXT");
+      console.log('✅ products.product_category 컬럼 추가됨');
+    }
   } catch (e) {
     console.error('마이그레이션 실패:', e.message);
+  }
+  
+  // reviews 테이블에 quality_score 컬럼 추가
+  try {
+    const cols = db.prepare("PRAGMA table_info(reviews)").all();
+    const colNames = cols.map(c => c.name);
+    
+    if (!colNames.includes('quality_score')) {
+      db.exec("ALTER TABLE reviews ADD COLUMN quality_score INTEGER");
+      console.log('✅ reviews.quality_score 컬럼 추가됨');
+    }
+    if (!colNames.includes('quality_flags')) {
+      db.exec("ALTER TABLE reviews ADD COLUMN quality_flags TEXT");
+      console.log('✅ reviews.quality_flags 컬럼 추가됨');
+    }
+  } catch (e) {
+    console.error('reviews 마이그레이션 실패:', e.message);
   }
 }
 
